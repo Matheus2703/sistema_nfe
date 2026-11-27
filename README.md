@@ -45,14 +45,22 @@ Pacotes do `dfe-core`:
 
 ## Pré-requisitos
 
-- Java 21 ou superior
-- Maven 3.9 ou superior
+- Java 21 ou superior (JDK, ex.: Temurin 21)
+- Não precisa instalar o Maven: o projeto traz o Maven Wrapper (`mvnw` / `mvnw.cmd`), que baixa a versão certa sozinho
 - Certificado A1 (e-CNPJ, .pfx) de uma empresa com inscrição estadual ativa no RS
 
 ## Compilar e testar
 
+Linux/macOS:
+
 ```bash
-mvn verify
+./mvnw verify
+```
+
+Windows (PowerShell, na pasta do projeto):
+
+```powershell
+.\mvnw.cmd verify
 ```
 
 Os testes não precisam de certificado nem de internet: geram certificados de teste e
@@ -60,11 +68,21 @@ sobem uma "Sefaz falsa" local que exige certificado do cliente, como a real.
 
 ## Primeiro marco: status 107 na homologação da Sefaz RS
 
-1. Gere o jar:
+1. Na pasta principal do projeto (onde está o `pom.xml`), gere o jar:
+
+   Linux/macOS:
 
    ```bash
-   mvn -q package -DskipTests
+   ./mvnw -q package -DskipTests
    ```
+
+   Windows (PowerShell):
+
+   ```powershell
+   .\mvnw.cmd -q package -DskipTests
+   ```
+
+   O arquivo gerado fica em `dfe-cli/target/dfe-cli.jar`.
 
 2. Rode, com a senha numa variável de ambiente (nunca como argumento):
 
@@ -99,7 +117,7 @@ e recebido) e `--truststore`. Para só conferir o certificado:
 Também dá para rodar o teste automatizado contra a Sefaz real:
 
 ```bash
-NFE_PFX=/caminho/certificado.pfx NFE_PFX_SENHA='sua-senha' mvn -pl dfe-core test -Dtest=SefazHomologacaoRealTest
+NFE_PFX=/caminho/certificado.pfx NFE_PFX_SENHA='sua-senha' ./mvnw -pl dfe-core test -Dtest=SefazHomologacaoRealTest
 ```
 
 ### Se der erro de TLS ("Certificado do servidor da Sefaz não é confiável")
@@ -136,7 +154,7 @@ O Java não traz a cadeia de certificados da ICP-Brasil. Monte uma truststore co
 1. Baixe o novo pacote de schemas no Portal Nacional da NF-e.
 2. Coloque em `dfe-core/src/main/resources/schemas/<novo-pacote>/`.
 3. Atualize `schemaDirectory` em `dfe-core/pom.xml` e `ValidadorXsd.PACOTE_PADRAO`.
-4. Rode `mvn verify`: as classes são regeneradas e os testes mostram o que quebrou.
+4. Rode `./mvnw verify`: as classes são regeneradas e os testes mostram o que quebrou.
 
 Os schemas atuais (PL_010h) vieram do espelho público mantido pelo projeto
 nfephp-org/sped-nfe. Antes de ir para produção, confira com o pacote oficial do portal.
