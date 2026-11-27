@@ -7,7 +7,7 @@ schemas oficiais, assinado e enviado direto aos web services da Sefaz.
 - Plano completo e fases: [docs/PLANO.md](docs/PLANO.md)
 - Decisão de linguagem e arquitetura: [docs/ADR-001-linguagem-e-arquitetura.md](docs/ADR-001-linguagem-e-arquitetura.md)
 
-## Situação atual: fase 0 (fundação)
+## Situação atual: fase 0 (fundação) concluída
 
 | Item | Status |
 |---|---|
@@ -20,7 +20,7 @@ schemas oficiais, assinado e enviado direto aos web services da Sefaz.
 | Validação XSD antes de enviar | ✅ |
 | Endereços dos web services do RS (NF-e e NFC-e, homologação e produção) | ✅ |
 | Consulta de status do serviço (`NFeStatusServico4`) | ✅ testado com Sefaz falsa local |
-| **Status 107 na homologação real da Sefaz RS** | ⏳ rodar na sua máquina (abaixo) |
+| **Status 107 na homologação real da Sefaz RS** | ✅ recebido em 27/11/2026 |
 
 ## Estrutura
 

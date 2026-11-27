@@ -10,7 +10,7 @@ tags:
   - sefaz-rs
   - java
 status: em-andamento
-fase_atual: 0 - Fundação
+fase_atual: 1 - Núcleo NF-e
 atualizado: 2026-11-27
 repositorio: https://github.com/Matheus2703/sistema_nfe
 branch: fase-0-fundacao
@@ -33,10 +33,10 @@ multiempresa, com interface web. Começa em **homologação**.
 
 ## Situação atual
 
-> [!warning] Fase 0: falta só o marco final
-> Todo o código da fase 0 está pronto e testado (30 testes passando, mais 1 que só roda com o
-> certificado real). Falta receber o **cStat 107** ("Serviço em Operação") da homologação real
-> da Sefaz RS, rodando no notebook com o certificado da empresa.
+> [!success] Fase 0 concluída em 27/11/2026
+> A homologação real da Sefaz RS respondeu **cStat 107** ("Servico em Operacao", tMed 1 s), com
+> TLS 1.2 e o certificado e-CNPJ A1 da empresa. Código testado (30 testes passando, mais 1 que só
+> roda com o certificado real). Próxima: **Fase 1**, primeira NF-e autorizada.
 
 ### Histórico do teste real (no notebook, Windows)
 
@@ -49,9 +49,9 @@ multiempresa, com interface web. Começa em **homologação**.
 | 3 | 2º certificado | ✅ válido até 16/09/2027 | — |
 | 3 | Status | Conexão aberta, mas a Sefaz respondeu **HTTP 403** | TLS 1.2 fixo, cadeia completada, motivo do 403 exibido |
 | 4 | Diagnóstico do 403 (`openssl`, sem certificado) | A Sefaz RS **não aceita TLS 1.3** e pede o certificado do cliente **no handshake**, anunciando só as raízes aceitas | Reproduzido em teste: com `.pfx` só com o certificado da empresa, o Java não envia nada. Criado o gerente de chaves que sempre envia o certificado |
-| 5 | Status com a correção | ⏳ **aguardando novo teste** | — |
+| 5 | Status com a correção | ✅ **cStat 107, Servico em Operacao** (TLS 1.2; cadeia de 3 certificados: AC SAFEWEB RFB v5 → AC Secretaria da Receita Federal do Brasil v4 → Raiz Brasileira v5) | Marco da fase 0 atingido |
 
-> [!info] Causa do HTTP 403 (diagnosticada em 27/11/2026)
+> [!info] Causa do HTTP 403 (diagnosticada e resolvida em 27/11/2026)
 > - A homologação da Sefaz RS **não aceita TLS 1.3** (derruba a conexão). O Java já negociava
 >   TLS 1.2, então fixar o TLS 1.2 não mudava nada. A hipótese anterior (pedido de certificado
 >   depois do handshake, em TLS 1.3) estava errada.
@@ -70,11 +70,11 @@ multiempresa, com interface web. Começa em **homologação**.
 
 ### Próximo passo
 
-- [ ] Atualizar a pasta do projeto (`$HOME\Desktop\sistema_nfe`, clone da branch `fase-0-fundacao`) com `git pull`
-- [ ] Compilar com `.\mvnw.cmd -q package -DskipTests`
-- [ ] Rodar `status` com o certificado válido e conferir **cStat 107**
-- [ ] Se vier 403: conferir a "Cadeia enviada" e rodar com `-Djavax.net.debug=ssl:handshake`
-- [ ] Com o 107 confirmado: iniciar a **Fase 1** (primeira NF-e autorizada)
+- [x] Atualizar a pasta do projeto (`$HOME\Desktop\sistema_nfe`, clone da branch `fase-0-fundacao`)
+- [x] Compilar com `.\mvnw.cmd -q package -DskipTests`
+- [x] Rodar `status` com o certificado válido e conferir **cStat 107**
+- [ ] Pull request da `fase-0-fundacao` para `main`
+- [ ] Iniciar a **Fase 1** (primeira NF-e autorizada), começando pela chave de acesso
 
 ---
 
@@ -132,8 +132,8 @@ graph TD
 
 | Fase | Entrega | Marco | Estimativa | Status |
 |---|---|---|---|---|
-| **0. Fundação** | Maven, XSD → JAXB, certificado, TLS mútuo, SOAP | `NfeStatusServico4` responde **107** | 1 semana | 🟡 falta o 107 real |
-| **1. Núcleo NF-e** | XML mínimo (CSOSN 102), chave de acesso, assinatura, autorização síncrona, `nfeProc`, consulta protocolo | **Primeira NF-e autorizada (100)** | 2–3 semanas | ⚪ |
+| **0. Fundação** | Maven, XSD → JAXB, certificado, TLS mútuo, SOAP | `NfeStatusServico4` responde **107** | 1 semana | ✅ 107 em 27/11/2026 |
+| **1. Núcleo NF-e** | XML mínimo (CSOSN 102), chave de acesso, assinatura, autorização síncrona, `nfeProc`, consulta protocolo | **Primeira NF-e autorizada (100)** | 2–3 semanas | 🟡 próxima |
 | **2. Eventos** | Cancelamento (110111), CC-e (110110), inutilização | Cancelar e corrigir nota de teste | 1 semana | ⚪ |
 | **3. DANFE** | PDF A4 conforme MOC, e-mail com XML + PDF | DANFE aprovado pelo contador | 1–2 semanas | ⚪ |
 | **4. Multiempresa e web** | Empresas, usuários, cofre de certificados, produtos, clientes, naturezas, séries, painel | Duas empresas emitindo isoladas | 2–3 semanas | ⚪ |
@@ -158,7 +158,7 @@ graph TD
 - [x] Consulta de status + teste com "Sefaz falsa" local exigindo certificado do cliente
 - [x] Teste com Sefaz falsa que anuncia só a AC raiz, como a Sefaz RS
 - [x] Testes: 30 passando, mais 1 que só roda com o certificado real
-- [ ] **cStat 107 na homologação real da Sefaz RS**
+- [x] **cStat 107 na homologação real da Sefaz RS** (27/11/2026)
 
 ### Fase 1: checklist (próxima)
 
@@ -289,7 +289,7 @@ e SVC-AN (contingência do RS), que entra na fase 7.
 - [ ] Hospedagem: nuvem, VPS ou servidor próprio (o sistema roda em Docker em qualquer uma)
 - [ ] Contador para validar o motor fiscal e o DANFE
 - [ ] Conferir os schemas PL_010h com o pacote oficial do Portal Nacional da NF-e
-- [ ] Pull request da `fase-0-fundacao` para `main` depois do 107
+- [ ] Pull request da `fase-0-fundacao` para `main` (o 107 já foi recebido)
 - [ ] Escolher a cópia principal do plano: esta nota do Obsidian ou `docs/PLANO.md` (hoje são iguais e precisam ser atualizadas juntas)
 
 ---
