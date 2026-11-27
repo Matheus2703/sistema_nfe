@@ -110,7 +110,7 @@ graph TD
 | Módulo | Situação | Responsabilidade |
 |---|---|---|
 | `dfe-core` | ✅ criado | Schemas JAXB, certificado A1, TLS mútuo, SOAP, validação XSD, serviços Sefaz |
-| `dfe-cli` | ✅ criado | Linha de comando para testes (`certificado`, `truststore`, `status`) |
+| `dfe-cli` | ✅ criado | Linha de comando para testes (`certificado`, `truststore`, `status`, `consulta`) |
 | `dfe-danfe` | fase 3 | PDF do DANFE (A4) e DANFE NFC-e (80 mm) |
 | `fiscal` | fase 5 | Motor de cálculo do Simples Nacional |
 | `app` | fase 4 | Web, autenticação, multiempresa, cadastros, fila, painel |
@@ -124,8 +124,8 @@ graph TD
 | `certificado` | `CertificadoA1` (CNPJ pelo OID ICP-Brasil 2.16.76.1.3.3, validade), `TruststoreIcpBrasil` |
 | `xml` | `Xml` (sem prefixos de namespace, leitura protegida contra XXE), `ValidadorXsd` |
 | `ws` | `CatalogoWebServices`, `ContextoTls`, `EnvelopeSoap`, `ClienteSefaz`, `ServicoSefaz` |
-| `servico` | `ConsultaStatusServico`, `RetornoStatusServico` |
-| gerado | `br.inf.portalfiscal.nfe.*` a partir dos XSD **PL_010h** (já com IBS/CBS) |
+| `servico` | `ConsultaStatusServico`, `RetornoStatusServico`, `ConsultaProtocoloServico` (`RetornoConsultaProtocolo`, `ProtocoloNFe`, `EventoNFe`) |
+| gerado | `br.inf.portalfiscal.nfe.*` a partir dos XSD **PL_010h** (já com IBS/CBS); `br.inf.portalfiscal.nfe.conssit.*` (consulta protocolo, em pacote próprio porque redefine `TProtNFe` e os tipos de evento) |
 
 ---
 
@@ -170,7 +170,7 @@ graph TD
 - [ ] Validar contra `enviNFe_v4.00.xsd`
 - [ ] Enviar em `NFeAutorizacao4` síncrono (`indSinc=1`)
 - [ ] Montar `nfeProc` (NFe + protNFe) e guardar
-- [ ] `NFeConsultaProtocolo4` para recuperar nota após timeout ou rejeição 204
+- [x] `NFeConsultaProtocolo4` para recuperar nota após timeout ou rejeição 204: `ConsultaProtocoloServico` monta e valida o `consSitNFe` pela chave (endereço pela UF e pelo modelo da chave) e devolve cStat, `protNFe` (com o XML para o `nfeProc`) e eventos; comando `consulta` na CLI. Pelo MOC, chave nunca emitida volta com 217 ("NF-e não consta na base de dados da SEFAZ"); testado com Sefaz falsa, ainda não na homologação real
 - [ ] Regras de homologação aplicadas automaticamente
 - [ ] Marco: **cStat 100, Autorizado o uso da NF-e**
 

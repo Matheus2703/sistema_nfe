@@ -6,7 +6,12 @@ import br.com.sistemanfe.dfe.certificado.TruststoreIcpBrasil;
 import br.com.sistemanfe.dfe.comum.Ambiente;
 import br.com.sistemanfe.dfe.comum.ModeloDocumento;
 import br.com.sistemanfe.dfe.comum.UF;
+import br.com.sistemanfe.dfe.nfe.ChaveAcesso;
+import br.com.sistemanfe.dfe.servico.ConsultaProtocoloServico;
 import br.com.sistemanfe.dfe.servico.ConsultaStatusServico;
+import br.com.sistemanfe.dfe.servico.EventoNFe;
+import br.com.sistemanfe.dfe.servico.ProtocoloNFe;
+import br.com.sistemanfe.dfe.servico.RetornoConsultaProtocolo;
 import br.com.sistemanfe.dfe.servico.RetornoStatusServico;
 import br.com.sistemanfe.dfe.ws.CatalogoWebServices;
 import br.com.sistemanfe.dfe.ws.ClienteSefaz;
@@ -49,14 +54,20 @@ public final class Main {
               java -jar dfe-cli.jar truststore --zip <ACcompactado.zip> [--saida icpbrasil.p12]
               java -jar dfe-cli.jar truststore --pasta <pasta-com-certificados> [--saida icpbrasil.p12]
               java -jar dfe-cli.jar status --pfx <arquivo.pfx> [opções]
+              java -jar dfe-cli.jar consulta --pfx <arquivo.pfx> --chave <44 caracteres> [opções]
 
-            Opções do comando status:
+            Opções dos comandos status e consulta:
               --ambiente homologacao|producao   (padrão: homologacao)
-              --modelo nfe|nfce                 (padrão: nfe)
-              --uf RS                           (padrão: RS)
               --truststore <arquivo.p12|.jks>   cadeia ICP-Brasil (padrão: icpbrasil.p12 da pasta atual, se existir)
               --tls 1.2|1.3|auto                versão do TLS (padrão: 1.2; a Sefaz RS não aceita 1.3)
               --verbose                         mostra o XML enviado e recebido
+
+            Só no comando status:
+              --modelo nfe|nfce                 (padrão: nfe)
+              --uf RS                           (padrão: RS)
+
+            No comando consulta, a UF e o modelo saem da chave de acesso. A chave pode ser
+            copiada do DANFE com os espaços, entre aspas.
 
             Senhas:
               NFE_PFX_SENHA         senha do certificado (se ausente, será pedida)
@@ -96,6 +107,7 @@ public final class Main {
             return switch (args[0]) {
                 case "certificado" -> certificado(opcoes);
                 case "status" -> status(opcoes);
+                case "consulta" -> consulta(opcoes);
                 case "truststore" -> truststore(opcoes);
                 default -> {
                     System.err.println("Comando desconhecido: " + args[0]);
@@ -125,11 +137,7 @@ public final class Main {
     }
 
     private static int status(Map<String, String> op) {
-        Ambiente ambiente = switch (op.getOrDefault("ambiente", "homologacao").toLowerCase()) {
-            case "homologacao", "2" -> Ambiente.HOMOLOGACAO;
-            case "producao", "1" -> Ambiente.PRODUCAO;
-            default -> throw new IllegalArgumentException("--ambiente deve ser homologacao ou producao");
-        };
+        Ambiente ambiente = lerAmbiente(op);
         ModeloDocumento modelo = switch (op.getOrDefault("modelo", "nfe").toLowerCase()) {
             case "nfe", "55" -> ModeloDocumento.NFE;
             case "nfce", "65" -> ModeloDocumento.NFCE;
@@ -142,6 +150,104 @@ public final class Main {
             throw new IllegalArgumentException("--uf inválida: " + op.get("uf"));
         }
 
+        ClienteSefaz cliente = prepararCliente(op);
+
+        System.out.printf("%nConsultando status: %s / %s / %s ...%n", uf, nome(modelo), nome(ambiente));
+        RetornoStatusServico r = new ConsultaStatusServico(cliente, CatalogoWebServices.padrao())
+                .consultar(uf, modelo, ambiente);
+
+        System.out.println("cStat    : " + r.cStat());
+        System.out.println("xMotivo  : " + r.xMotivo());
+        System.out.println("dhRecbto : " + r.dhRecbto());
+        if (r.tMedSegundos() != null) {
+            System.out.println("tMed     : " + r.tMedSegundos() + " s");
+        }
+        if (r.xObs() != null) {
+            System.out.println("xObs     : " + r.xObs());
+        }
+        if (r.emOperacao()) {
+            System.out.println("\nOK: serviço em operação.");
+            return OK;
+        }
+        System.out.println("\nA Sefaz respondeu, mas o serviço não está em operação.");
+        return SEFAZ_FORA;
+    }
+
+    /** Consulta a situação da NF-e/NFC-e pela chave. Devolve {@link #OK} sempre que a Sefaz responde. */
+    private static int consulta(Map<String, String> op) {
+        String texto = op.get("chave");
+        if (texto == null) {
+            throw new IllegalArgumentException("Informe a chave de acesso com --chave <44 caracteres>");
+        }
+        ChaveAcesso chave = lerChave(texto);
+        Ambiente ambiente = lerAmbiente(op);
+
+        ClienteSefaz cliente = prepararCliente(op);
+
+        System.out.printf("%nConsultando a NF-e: %s / %s / %s ...%n", chave.uf(), nome(chave.modelo()), nome(ambiente));
+        System.out.println("Chave    : " + chave);
+        RetornoConsultaProtocolo r = new ConsultaProtocoloServico(cliente, CatalogoWebServices.padrao())
+                .consultar(chave, ambiente);
+        imprimirConsulta(r);
+        return OK;
+    }
+
+    /** Lê a chave de acesso; aceita os espaços com que ela aparece no DANFE. */
+    static ChaveAcesso lerChave(String texto) {
+        try {
+            return ChaveAcesso.de(texto.replaceAll("\\s", ""));
+        } catch (DfeException e) {
+            throw new IllegalArgumentException("--chave inválida: " + e.getMessage());
+        }
+    }
+
+    static void imprimirConsulta(RetornoConsultaProtocolo r) {
+        System.out.println("cStat    : " + r.cStat());
+        System.out.println("xMotivo  : " + r.xMotivo());
+        System.out.println("dhRecbto : " + r.dhRecbto());
+        ProtocoloNFe p = r.protocolo();
+        if (p != null) {
+            System.out.println("Protocolo: " + (p.nProt() == null ? "(sem número)" : p.nProt())
+                    + " em " + p.dhRecbto() + " (cStat " + p.cStat() + ": " + p.xMotivo() + ")");
+        }
+        for (EventoNFe e : r.eventos()) {
+            System.out.println("Evento   : " + e.tpEvento() + " seq " + e.nSeqEvento()
+                    + (e.xEvento() == null ? "" : " - " + e.xEvento())
+                    + " | cStat " + e.cStat() + ": " + e.xMotivo()
+                    + (e.nProt() == null ? "" : " | protocolo " + e.nProt())
+                    + " em " + e.dhRegEvento());
+        }
+
+        System.out.println();
+        if (r.autorizada()) {
+            System.out.println("OK: NF-e autorizada"
+                    + (p != null && p.nProt() != null ? " (protocolo " + p.nProt() + ")." : "."));
+        } else if (r.cancelada()) {
+            System.out.println("NF-e cancelada.");
+        } else if (r.denegada()) {
+            System.out.println("Uso denegado: o número foi consumido e a nota não pode ser usada.");
+        } else if (r.naoConsta()) {
+            System.out.println("A Sefaz não tem nenhuma NF-e com esta chave neste ambiente.");
+            System.out.println("Depois de um timeout, isso quer dizer que a nota não foi processada:"
+                    + " reenvie a mesma nota, com o mesmo número e a mesma chave.");
+        } else {
+            System.out.println("A Sefaz não aceitou a consulta: veja o xMotivo acima.");
+        }
+    }
+
+    private static Ambiente lerAmbiente(Map<String, String> op) {
+        return switch (op.getOrDefault("ambiente", "homologacao").toLowerCase()) {
+            case "homologacao", "2" -> Ambiente.HOMOLOGACAO;
+            case "producao", "1" -> Ambiente.PRODUCAO;
+            default -> throw new IllegalArgumentException("--ambiente deve ser homologacao ou producao");
+        };
+    }
+
+    /**
+     * Abre o certificado, a truststore e o TLS conforme as opções, imprimindo o que foi usado
+     * (inclusive a cadeia enviada, que ajuda a diagnosticar o HTTP 403).
+     */
+    private static ClienteSefaz prepararCliente(Map<String, String> op) {
         CertificadoA1 cert = abrirCertificado(op);
         imprimirCertificado(cert);
 
@@ -195,26 +301,7 @@ public final class Main {
                 }
             });
         }
-
-        System.out.printf("%nConsultando status: %s / %s / %s ...%n", uf, nome(modelo), nome(ambiente));
-        RetornoStatusServico r = new ConsultaStatusServico(construtor.construir(), CatalogoWebServices.padrao())
-                .consultar(uf, modelo, ambiente);
-
-        System.out.println("cStat    : " + r.cStat());
-        System.out.println("xMotivo  : " + r.xMotivo());
-        System.out.println("dhRecbto : " + r.dhRecbto());
-        if (r.tMedSegundos() != null) {
-            System.out.println("tMed     : " + r.tMedSegundos() + " s");
-        }
-        if (r.xObs() != null) {
-            System.out.println("xObs     : " + r.xObs());
-        }
-        if (r.emOperacao()) {
-            System.out.println("\nOK: serviço em operação.");
-            return OK;
-        }
-        System.out.println("\nA Sefaz respondeu, mas o serviço não está em operação.");
-        return SEFAZ_FORA;
+        return construtor.construir();
     }
 
     private static int truststore(Map<String, String> op) {

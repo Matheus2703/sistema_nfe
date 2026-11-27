@@ -77,6 +77,28 @@
                             <locale>pt_BR</locale>
                         </configuration>
                     </execution>
+                    <!--
+                      Consulta protocolo (consSitNFe). O leiauteConsSitNFe redefine TProtNFe e
+                      traz os tipos de evento (TEvento, TRetEvento, TProcEvento), então vai para
+                      um pacote próprio, com pasta de saída própria, sem tocar no pacote acima.
+                    -->
+                    <execution>
+                        <id>schemas-consulta-protocolo</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <schemaDirectory>src/main/resources/schemas/PL_010h</schemaDirectory>
+                            <schemaIncludes>
+                                <include>consSitNFe_v4.00.xsd</include>
+                                <include>retConsSitNFe_v4.00.xsd</include>
+                            </schemaIncludes>
+                            <generatePackage>br.inf.portalfiscal.nfe.conssit</generatePackage>
+                            <generateDirectory>${project.build.directory}/generated-sources/xjc-conssit</generateDirectory>
+                            <noFileHeader>true</noFileHeader>
+                            <locale>pt_BR</locale>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>
