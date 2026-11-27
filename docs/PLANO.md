@@ -13,7 +13,7 @@ status: em-andamento
 fase_atual: 1 - Núcleo NF-e
 atualizado: 2026-11-27
 repositorio: https://github.com/Matheus2703/sistema_nfe
-branch: fase-0-fundacao
+branch: main
 ---
 
 # Sistema NF-e: plano completo
@@ -27,7 +27,7 @@ multiempresa, com interface web. Começa em **homologação**.
 > - **Interface:** sistema web (Thymeleaf + HTMX)
 > - **Volume no 1º ano:** até 20 empresas
 > - **Prazo estimado:** 4 a 5 meses (1 dev Java experiente)
-> - **Repositório:** [Matheus2703/sistema_nfe](https://github.com/Matheus2703/sistema_nfe), branch `fase-0-fundacao`
+> - **Repositório:** [Matheus2703/sistema_nfe](https://github.com/Matheus2703/sistema_nfe), branch `main`
 
 ---
 
@@ -73,8 +73,9 @@ multiempresa, com interface web. Começa em **homologação**.
 - [x] Atualizar a pasta do projeto (`$HOME\Desktop\sistema_nfe`, clone da branch `fase-0-fundacao`)
 - [x] Compilar com `.\mvnw.cmd -q package -DskipTests`
 - [x] Rodar `status` com o certificado válido e conferir **cStat 107**
-- [ ] Pull request da `fase-0-fundacao` para `main`
-- [ ] Iniciar a **Fase 1** (primeira NF-e autorizada), começando pela chave de acesso
+- [x] Pull request da `fase-0-fundacao` para `main` ([PR #1](https://github.com/Matheus2703/sistema_nfe/pull/1), mergeado em 27/11/2026)
+- [x] Iniciar a **Fase 1** (primeira NF-e autorizada): chave de acesso pronta ([PR #2](https://github.com/Matheus2703/sistema_nfe/pull/2), mergeado em 27/11/2026)
+- [ ] Fase 1: NF-e mínima, assinatura XMLDSig e validação contra o `enviNFe` (em andamento)
 
 ---
 
@@ -120,7 +121,8 @@ graph TD
 | Pacote | Classes |
 |---|---|
 | `comum` | `Ambiente`, `UF`, `ModeloDocumento`, `FormaEmissao` (`tpEmis`) |
-| `nfe` | `ChaveAcesso` (44 caracteres, DV módulo 11 com CNPJ alfanumérico, `cNF` aleatório, `Id` da `infNFe`) |
+| `nfe` | `ChaveAcesso` (44 caracteres, DV módulo 11 com CNPJ alfanumérico, `cNF` aleatório, `Id` da `infNFe`), `MontadorNFe` (NF-e mínima a partir de `DadosNFe`: `Emitente`, `Destinatario`, `ItemNFe`, `Pagamento`), `NFeAssinada`, `LoteNFe` (`enviNFe` síncrono validado no XSD) |
+| `assinatura` | `AssinadorXml` (XMLDSig enveloped, C14N, RSA-SHA1, `Reference URI="#Id"`, só o `X509Certificate` no `KeyInfo`) |
 | `certificado` | `CertificadoA1` (CNPJ pelo OID ICP-Brasil 2.16.76.1.3.3, validade), `TruststoreIcpBrasil` |
 | `xml` | `Xml` (sem prefixos de namespace, leitura protegida contra XXE), `ValidadorXsd` |
 | `ws` | `CatalogoWebServices`, `ContextoTls`, `EnvelopeSoap`, `ClienteSefaz`, `ServicoSefaz` |
@@ -164,14 +166,14 @@ graph TD
 ### Fase 1: checklist (próxima)
 
 - [x] Gerar `chave de acesso` (44 dígitos, dígito verificador módulo 11): `ChaveAcesso` gera, valida, decompõe e devolve o `Id` da `infNFe`; aceita CNPJ alfanumérico; `cNF` sorteado fora da rejeição 897
-- [ ] Montar `<NFe>` mínima: emitente, destinatário, 1 item, CSOSN 102, pagamento, totais
-- [ ] Assinar `infNFe` (XMLDSig enveloped, C14N, RSA-SHA1, `Reference URI="#NFe{chave}"`)
-- [ ] Conferir a assinatura em teste: desde o JDK 17 o Java recusa *validar* assinaturas SHA-1 no modo seguro; desligar `org.jcp.xml.dsig.secureValidation` só nesse `DOMValidateContext` (assinar não é afetado)
-- [ ] Validar contra `enviNFe_v4.00.xsd`
+- [x] Montar `<NFe>` mínima: emitente, destinatário, 1 item, CSOSN 102, pagamento, totais: `MontadorNFe` monta a partir de objetos simples (`DadosNFe`), com PIS/COFINS CST 99 zerados e sem transporte, e recusa antes do envio o que a Sefaz rejeitaria (CFOP que não combina com o destino, não contribuinte sem consumidor final, pagamentos que não fecham com o total)
+- [x] Assinar `infNFe` (XMLDSig enveloped, C14N, RSA-SHA1, `Reference URI="#NFe{chave}"`): `AssinadorXml` (genérico, serve também para eventos) e `NFeAssinada`, que confere a raiz do CNPJ do certificado com a do emitente (rejeição 213)
+- [x] Conferir a assinatura em teste: desde o JDK 17 o Java recusa *validar* assinaturas SHA-1 no modo seguro; desligar `org.jcp.xml.dsig.secureValidation` só nesse `DOMValidateContext` (assinar não é afetado). Conferida também dentro do lote; no JDK 25 o modo seguro recusa já na leitura (`MarshalException`)
+- [x] Validar contra `enviNFe_v4.00.xsd`: `LoteNFe` monta o `<enviNFe>` (versão 4.00, `idLote`, `indSinc=1`) com os mesmos bytes da NF-e assinada e valida no schema
 - [ ] Enviar em `NFeAutorizacao4` síncrono (`indSinc=1`)
 - [ ] Montar `nfeProc` (NFe + protNFe) e guardar
 - [x] `NFeConsultaProtocolo4` para recuperar nota após timeout ou rejeição 204: `ConsultaProtocoloServico` monta e valida o `consSitNFe` pela chave (endereço pela UF e pelo modelo da chave) e devolve cStat, `protNFe` (com o XML para o `nfeProc`) e eventos; comando `consulta` na CLI. Pelo MOC, chave nunca emitida volta com 217 ("NF-e não consta na base de dados da SEFAZ"); testado com Sefaz falsa, ainda não na homologação real
-- [ ] Regras de homologação aplicadas automaticamente
+- [x] Regras de homologação aplicadas automaticamente: com `tpAmb=2`, o nome do destinatário vira o texto exigido; o CNPJ do certificado é conferido com o do emitente. Se a IE está ativa no RS, só a Sefaz confere
 - [ ] Marco: **cStat 100, Autorizado o uso da NF-e**
 
 ---
@@ -181,6 +183,7 @@ graph TD
 > [!tip] Regras que o código já segue ou vai seguir
 > - XML no namespace padrão, **sem prefixos** (`ns2:`) nem declarações sobrando
 > - Assinatura só sobre `infNFe`, `Reference URI="#NFe{chave}"`, enveloped + C14N, RSA-SHA1; `Id` registrado como ID
+> - Base64 da assinatura (`SignatureValue`, `X509Certificate`) sem quebras de linha: o JDK quebra a cada 76 caracteres com CR LF, que vira `&#13;` no XML. A NF-e entra no lote com os mesmos bytes que foram assinados
 > - Chave de acesso: `cNF` sorteado com `SecureRandom`, nunca igual ao `nNF` nem às sequências vetadas pela NT 2019.001 (rejeição 897); no DV, cada caractere vale o código ASCII menos 48, então as letras do CNPJ alfanumérico valem de 17 (A) a 42 (Z) (NT Conjunta 2025.001)
 > - Truststore com a cadeia ICP-Brasil (não vem no Java)
 > - **TLS 1.2**: a Sefaz RS não aceita TLS 1.3 (derruba a conexão)
@@ -221,8 +224,8 @@ e SVC-AN (contingência do RS), que entra na fase 7.
 ## Como rodar (Windows / PowerShell)
 
 > [!example] Atualizar e compilar
-> A pasta `$HOME\Desktop\sistema_nfe` é um clone da branch `fase-0-fundacao`.
-> Em outra máquina, na primeira vez: `git clone --branch fase-0-fundacao https://github.com/Matheus2703/sistema_nfe.git`.
+> A pasta `$HOME\Desktop\sistema_nfe` é um clone do repositório, na branch `main`.
+> Em outra máquina, na primeira vez: `git clone https://github.com/Matheus2703/sistema_nfe.git`.
 > ```powershell
 > cd $HOME\Desktop\sistema_nfe
 > git pull
@@ -291,8 +294,8 @@ e SVC-AN (contingência do RS), que entra na fase 7.
 - [ ] Hospedagem: nuvem, VPS ou servidor próprio (o sistema roda em Docker em qualquer uma)
 - [ ] Contador para validar o motor fiscal e o DANFE
 - [x] Conferir os schemas PL_010h com o pacote oficial do Portal Nacional da NF-e (27/11/2026): os 12 usados no build, mais os de consulta de protocolo e inutilização (31 no total), são iguais aos oficiais. Fontes: PL_010h v1.03 de 13/11/2026, PL_010d (CNPJ alfanumérico) e PL_009p (`enviNFe`, `consStatServ` e outros)
-- [ ] Conferir os schemas de eventos (fase 2) e de distribuição DF-e (fase 8) com os pacotes oficiais próprios (eventos da NT 2025.002 v1.40, Distribuição de DF-e v1.04)
-- [ ] Pull request da `fase-0-fundacao` para `main` (o 107 já foi recebido)
+- [x] Conferir os schemas de eventos (fase 2) e de distribuição DF-e (fase 8) com os pacotes oficiais próprios (27/11/2026): cancelamento, CC-e, inutilização, evento genérico e manifestação do destinatário estão iguais ou equivalentes aos oficiais. Dois estavam desatualizados e foram trocados pelos oficiais: `tiposDistDFe_v1.01` (Distribuição de DF-e v1.04, com CNPJ e chave alfanuméricos) e `e211110_v1.00` (eventos da NT 2025.002 v1.40)
+- [x] Pull request da `fase-0-fundacao` para `main` ([PR #1](https://github.com/Matheus2703/sistema_nfe/pull/1), mergeado em 27/11/2026)
 - [ ] Escolher a cópia principal do plano: esta nota do Obsidian ou `docs/PLANO.md` (hoje são iguais e precisam ser atualizadas juntas)
 
 ---
