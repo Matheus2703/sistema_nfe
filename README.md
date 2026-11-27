@@ -72,7 +72,7 @@ sobem uma "Sefaz falsa" local que exige certificado do cliente, como a real.
 0. Baixe o projeto com o Git (na primeira vez) e atualize com `git pull` depois:
 
    ```bash
-   git clone --branch fase-0-fundacao https://github.com/Matheus2703/sistema_nfe.git
+   git clone https://github.com/Matheus2703/sistema_nfe.git
    cd sistema_nfe
    git pull
    ```
@@ -186,5 +186,6 @@ validade; nesse caso, use um A1 válido de uma empresa com inscrição estadual 
 
 Os schemas atuais (PL_010h) vieram do espelho público mantido pelo projeto
 nfephp-org/sped-nfe. Em 27/11/2026, os usados no build foram conferidos com os pacotes
-oficiais do portal (PL_010h v1.03, PL_010d e PL_009p) e são iguais. Os schemas de eventos
-e de distribuição DF-e ainda precisam ser conferidos com os pacotes próprios deles.
+oficiais do portal (PL_010h v1.03, PL_010d e PL_009p) e são iguais. Os de eventos e de
+distribuição DF-e também foram conferidos com os pacotes próprios; os dois que estavam
+desatualizados (`tiposDistDFe_v1.01` e `e211110_v1.00`) foram trocados pelos oficiais.

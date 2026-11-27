@@ -13,7 +13,7 @@ status: em-andamento
 fase_atual: 1 - Núcleo NF-e
 atualizado: 2026-11-27
 repositorio: https://github.com/Matheus2703/sistema_nfe
-branch: fase-0-fundacao
+branch: main
 ---
 
 # Sistema NF-e: plano completo
@@ -27,7 +27,7 @@ multiempresa, com interface web. Começa em **homologação**.
 > - **Interface:** sistema web (Thymeleaf + HTMX)
 > - **Volume no 1º ano:** até 20 empresas
 > - **Prazo estimado:** 4 a 5 meses (1 dev Java experiente)
-> - **Repositório:** [Matheus2703/sistema_nfe](https://github.com/Matheus2703/sistema_nfe), branch `fase-0-fundacao`
+> - **Repositório:** [Matheus2703/sistema_nfe](https://github.com/Matheus2703/sistema_nfe), branch `main`
 
 ---
 
@@ -73,8 +73,9 @@ multiempresa, com interface web. Começa em **homologação**.
 - [x] Atualizar a pasta do projeto (`$HOME\Desktop\sistema_nfe`, clone da branch `fase-0-fundacao`)
 - [x] Compilar com `.\mvnw.cmd -q package -DskipTests`
 - [x] Rodar `status` com o certificado válido e conferir **cStat 107**
-- [ ] Pull request da `fase-0-fundacao` para `main`
-- [ ] Iniciar a **Fase 1** (primeira NF-e autorizada), começando pela chave de acesso
+- [x] Pull request da `fase-0-fundacao` para `main` ([PR #1](https://github.com/Matheus2703/sistema_nfe/pull/1), mergeado em 27/11/2026)
+- [x] Iniciar a **Fase 1** (primeira NF-e autorizada): chave de acesso pronta ([PR #2](https://github.com/Matheus2703/sistema_nfe/pull/2), mergeado em 27/11/2026)
+- [ ] Fase 1: NF-e mínima, assinatura XMLDSig e validação contra o `enviNFe` (em andamento)
 
 ---
 
@@ -221,8 +222,8 @@ e SVC-AN (contingência do RS), que entra na fase 7.
 ## Como rodar (Windows / PowerShell)
 
 > [!example] Atualizar e compilar
-> A pasta `$HOME\Desktop\sistema_nfe` é um clone da branch `fase-0-fundacao`.
-> Em outra máquina, na primeira vez: `git clone --branch fase-0-fundacao https://github.com/Matheus2703/sistema_nfe.git`.
+> A pasta `$HOME\Desktop\sistema_nfe` é um clone do repositório, na branch `main`.
+> Em outra máquina, na primeira vez: `git clone https://github.com/Matheus2703/sistema_nfe.git`.
 > ```powershell
 > cd $HOME\Desktop\sistema_nfe
 > git pull
@@ -291,8 +292,8 @@ e SVC-AN (contingência do RS), que entra na fase 7.
 - [ ] Hospedagem: nuvem, VPS ou servidor próprio (o sistema roda em Docker em qualquer uma)
 - [ ] Contador para validar o motor fiscal e o DANFE
 - [x] Conferir os schemas PL_010h com o pacote oficial do Portal Nacional da NF-e (27/11/2026): os 12 usados no build, mais os de consulta de protocolo e inutilização (31 no total), são iguais aos oficiais. Fontes: PL_010h v1.03 de 13/11/2026, PL_010d (CNPJ alfanumérico) e PL_009p (`enviNFe`, `consStatServ` e outros)
-- [ ] Conferir os schemas de eventos (fase 2) e de distribuição DF-e (fase 8) com os pacotes oficiais próprios (eventos da NT 2025.002 v1.40, Distribuição de DF-e v1.04)
-- [ ] Pull request da `fase-0-fundacao` para `main` (o 107 já foi recebido)
+- [x] Conferir os schemas de eventos (fase 2) e de distribuição DF-e (fase 8) com os pacotes oficiais próprios (27/11/2026): cancelamento, CC-e, inutilização, evento genérico e manifestação do destinatário estão iguais ou equivalentes aos oficiais. Dois estavam desatualizados e foram trocados pelos oficiais: `tiposDistDFe_v1.01` (Distribuição de DF-e v1.04, com CNPJ e chave alfanuméricos) e `e211110_v1.00` (eventos da NT 2025.002 v1.40)
+- [x] Pull request da `fase-0-fundacao` para `main` ([PR #1](https://github.com/Matheus2703/sistema_nfe/pull/1), mergeado em 27/11/2026)
 - [ ] Escolher a cópia principal do plano: esta nota do Obsidian ou `docs/PLANO.md` (hoje são iguais e precisam ser atualizadas juntas)
 
 ---
