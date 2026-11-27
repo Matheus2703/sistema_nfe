@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>br.com.sistemanfe</groupId>
+        <artifactId>sistema-nfe</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>dfe-core</artifactId>
+    <name>DF-e Core</name>
+    <description>
+        Núcleo de comunicação com a Sefaz: schemas (JAXB), certificado A1,
+        TLS mútuo, envelope SOAP 1.2, validação XSD e serviços NF-e/NFC-e.
+        Java puro, sem Spring.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+        </dependency>
+        <!-- Leitura do CNPJ (OID ICP-Brasil) no certificado. -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+              Gera as classes Java a partir dos XSD oficiais.
+              Para cada nova Nota Técnica: trocar a pasta de schemas e rodar o build.
+              Os schemas de eventos (cancelamento, CC-e...) redefinem tipos com o
+              mesmo nome e serão gerados em execuções separadas, na fase 2.
+            -->
+            <plugin>
+                <groupId>org.jvnet.jaxb</groupId>
+                <artifactId>jaxb-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>schemas-nfe</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <schemaDirectory>src/main/resources/schemas/PL_010h</schemaDirectory>
+                            <schemaIncludes>
+                                <include>consStatServ_v4.00.xsd</include>
+                                <include>retConsStatServ_v4.00.xsd</include>
+                                <include>enviNFe_v4.00.xsd</include>
+                                <include>retEnviNFe_v4.00.xsd</include>
+                                <include>consReciNFe_v4.00.xsd</include>
+                                <include>retConsReciNFe_v4.00.xsd</include>
+                                <include>procNFe_v4.00.xsd</include>
+                            </schemaIncludes>
+                            <noFileHeader>true</noFileHeader>
+                            <locale>pt_BR</locale>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
