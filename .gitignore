@@ -1,0 +1,23 @@
+# Build
+target/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Segredos: certificados e truststores nunca vão para o repositório
+*.pfx
+*.p12
+*.jks
+*.pem
+*.key
+.env
+.env.*
+
+# SO
+.DS_Store
+Thumbs.db
