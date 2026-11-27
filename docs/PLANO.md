@@ -120,7 +120,8 @@ graph TD
 | Pacote | Classes |
 |---|---|
 | `comum` | `Ambiente`, `UF`, `ModeloDocumento`, `FormaEmissao` (`tpEmis`) |
-| `nfe` | `ChaveAcesso` (44 caracteres, DV módulo 11 com CNPJ alfanumérico, `cNF` aleatório, `Id` da `infNFe`) |
+| `nfe` | `ChaveAcesso` (44 caracteres, DV módulo 11 com CNPJ alfanumérico, `cNF` aleatório, `Id` da `infNFe`), `MontadorNFe` (NF-e mínima a partir de `DadosNFe`: `Emitente`, `Destinatario`, `ItemNFe`, `Pagamento`), `NFeAssinada`, `LoteNFe` (`enviNFe` síncrono validado no XSD) |
+| `assinatura` | `AssinadorXml` (XMLDSig enveloped, C14N, RSA-SHA1, `Reference URI="#Id"`, só o `X509Certificate` no `KeyInfo`) |
 | `certificado` | `CertificadoA1` (CNPJ pelo OID ICP-Brasil 2.16.76.1.3.3, validade), `TruststoreIcpBrasil` |
 | `xml` | `Xml` (sem prefixos de namespace, leitura protegida contra XXE), `ValidadorXsd` |
 | `ws` | `CatalogoWebServices`, `ContextoTls`, `EnvelopeSoap`, `ClienteSefaz`, `ServicoSefaz` |
@@ -164,14 +165,14 @@ graph TD
 ### Fase 1: checklist (próxima)
 
 - [x] Gerar `chave de acesso` (44 dígitos, dígito verificador módulo 11): `ChaveAcesso` gera, valida, decompõe e devolve o `Id` da `infNFe`; aceita CNPJ alfanumérico; `cNF` sorteado fora da rejeição 897
-- [ ] Montar `<NFe>` mínima: emitente, destinatário, 1 item, CSOSN 102, pagamento, totais
-- [ ] Assinar `infNFe` (XMLDSig enveloped, C14N, RSA-SHA1, `Reference URI="#NFe{chave}"`)
-- [ ] Conferir a assinatura em teste: desde o JDK 17 o Java recusa *validar* assinaturas SHA-1 no modo seguro; desligar `org.jcp.xml.dsig.secureValidation` só nesse `DOMValidateContext` (assinar não é afetado)
-- [ ] Validar contra `enviNFe_v4.00.xsd`
+- [x] Montar `<NFe>` mínima: emitente, destinatário, 1 item, CSOSN 102, pagamento, totais: `MontadorNFe` monta a partir de objetos simples (`DadosNFe`), com PIS/COFINS CST 99 zerados e sem transporte, e recusa antes do envio o que a Sefaz rejeitaria (CFOP que não combina com o destino, não contribuinte sem consumidor final, pagamentos que não fecham com o total)
+- [x] Assinar `infNFe` (XMLDSig enveloped, C14N, RSA-SHA1, `Reference URI="#NFe{chave}"`): `AssinadorXml` (genérico, serve também para eventos) e `NFeAssinada`, que confere a raiz do CNPJ do certificado com a do emitente (rejeição 213)
+- [x] Conferir a assinatura em teste: desde o JDK 17 o Java recusa *validar* assinaturas SHA-1 no modo seguro; desligar `org.jcp.xml.dsig.secureValidation` só nesse `DOMValidateContext` (assinar não é afetado). Conferida também dentro do lote; no JDK 25 o modo seguro recusa já na leitura (`MarshalException`)
+- [x] Validar contra `enviNFe_v4.00.xsd`: `LoteNFe` monta o `<enviNFe>` (versão 4.00, `idLote`, `indSinc=1`) com os mesmos bytes da NF-e assinada e valida no schema
 - [ ] Enviar em `NFeAutorizacao4` síncrono (`indSinc=1`)
 - [ ] Montar `nfeProc` (NFe + protNFe) e guardar
 - [ ] `NFeConsultaProtocolo4` para recuperar nota após timeout ou rejeição 204
-- [ ] Regras de homologação aplicadas automaticamente
+- [x] Regras de homologação aplicadas automaticamente: com `tpAmb=2`, o nome do destinatário vira o texto exigido; o CNPJ do certificado é conferido com o do emitente. Se a IE está ativa no RS, só a Sefaz confere
 - [ ] Marco: **cStat 100, Autorizado o uso da NF-e**
 
 ---
@@ -181,6 +182,7 @@ graph TD
 > [!tip] Regras que o código já segue ou vai seguir
 > - XML no namespace padrão, **sem prefixos** (`ns2:`) nem declarações sobrando
 > - Assinatura só sobre `infNFe`, `Reference URI="#NFe{chave}"`, enveloped + C14N, RSA-SHA1; `Id` registrado como ID
+> - Base64 da assinatura (`SignatureValue`, `X509Certificate`) sem quebras de linha: o JDK quebra a cada 76 caracteres com CR LF, que vira `&#13;` no XML. A NF-e entra no lote com os mesmos bytes que foram assinados
 > - Chave de acesso: `cNF` sorteado com `SecureRandom`, nunca igual ao `nNF` nem às sequências vetadas pela NT 2019.001 (rejeição 897); no DV, cada caractere vale o código ASCII menos 48, então as letras do CNPJ alfanumérico valem de 17 (A) a 42 (Z) (NT Conjunta 2025.001)
 > - Truststore com a cadeia ICP-Brasil (não vem no Java)
 > - **TLS 1.2**: a Sefaz RS não aceita TLS 1.3 (derruba a conexão)
