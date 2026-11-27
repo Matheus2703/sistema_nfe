@@ -54,6 +54,7 @@ public final class Main {
               --modelo nfe|nfce                 (padrão: nfe)
               --uf RS                           (padrão: RS)
               --truststore <arquivo.p12|.jks>   cadeia ICP-Brasil (padrão: icpbrasil.p12 da pasta atual, se existir)
+              --tls 1.2|1.3|auto                versão do TLS (padrão: 1.2, exigido pelos servidores da Sefaz)
               --verbose                         mostra o XML enviado e recebido
 
             Senhas:
@@ -141,12 +142,27 @@ public final class Main {
         if (op.containsKey("truststore") && !Files.isRegularFile(ts)) {
             throw new IllegalArgumentException("Truststore não encontrada: " + ts.toAbsolutePath());
         }
+        KeyStore truststore = null;
         if (Files.isRegularFile(ts)) {
             System.out.println("Truststore: " + ts.toAbsolutePath());
-            construtor.confiancaExtra(ContextoTls.lerTruststore(ts, senhaTruststore()));
+            truststore = ContextoTls.lerTruststore(ts, senhaTruststore());
+            construtor.confiancaExtra(truststore);
         } else {
             System.out.println("Truststore: (nenhuma; usando só a confiança padrão do Java)");
         }
+        int noPfx = cert.cadeia().size();
+        int enviada = ContextoTls.completarCadeia(cert.cadeia(), truststore).size();
+        System.out.println("Cadeia   : " + noPfx + " certificado(s) no .pfx"
+                + (enviada > noPfx ? ", " + enviada + " enviados (completada pela truststore)" : ""));
+
+        String tls = op.getOrDefault("tls", "1.2");
+        switch (tls) {
+            case "1.2" -> construtor.protocolosTls("TLSv1.2");
+            case "1.3" -> construtor.protocolosTls("TLSv1.3");
+            case "auto" -> construtor.protocolosTls("TLSv1.3", "TLSv1.2");
+            default -> throw new IllegalArgumentException("--tls deve ser 1.2, 1.3 ou auto");
+        }
+        System.out.println("TLS      : " + tls);
         if (op.containsKey("verbose")) {
             construtor.ouvinte(new ClienteSefaz.OuvinteMensagens() {
                 @Override

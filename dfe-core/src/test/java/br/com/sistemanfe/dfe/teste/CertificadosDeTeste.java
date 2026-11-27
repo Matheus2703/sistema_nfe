@@ -76,6 +76,32 @@ public final class CertificadosDeTeste {
         return gerar("CN=" + nome + ", OU=Teste, O=ICP-Brasil, C=BR", nomes, validadeDias);
     }
 
+    /** Certificado de AC raiz (autoassinado). */
+    public static Gerado acRaiz(String nome) {
+        return gerar("CN=" + nome + ", O=ICP-Brasil, C=BR", List.of(), 365);
+    }
+
+    /** Certificado emitido (assinado) por outra AC. */
+    public static Gerado emitidoPor(Gerado emissor, String nome) {
+        try {
+            KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+            kpg.initialize(2048);
+            KeyPair kp = kpg.generateKeyPair();
+            Instant agora = Instant.now();
+            JcaX509v3CertificateBuilder b = new JcaX509v3CertificateBuilder(
+                    X500Name.getInstance(emissor.certificado().getSubjectX500Principal().getEncoded()),
+                    BigInteger.valueOf(SERIAL.incrementAndGet()),
+                    Date.from(agora.minus(1, ChronoUnit.DAYS)),
+                    Date.from(agora.plus(365, ChronoUnit.DAYS)),
+                    new X500Name("CN=" + nome + ", O=ICP-Brasil, C=BR"), kp.getPublic());
+            X509Certificate cert = new JcaX509CertificateConverter().getCertificate(
+                    b.build(new JcaContentSignerBuilder("SHA256withRSA").build(emissor.chaves().getPrivate())));
+            return new Gerado(kp, cert);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** Certificado de servidor para {@code localhost}. */
     public static Gerado servidorLocalhost() {
         return gerar("CN=localhost", List.of(new GeneralName(GeneralName.dNSName, "localhost")), 30);

@@ -44,7 +44,7 @@ public final class ContextoTls {
             KeyStore ks = KeyStore.getInstance("PKCS12");
             ks.load(null, null);
             ks.setKeyEntry("certificado", certificado.chavePrivada(), senhaInterna,
-                    certificado.cadeia().toArray(new X509Certificate[0]));
+                    completarCadeia(certificado.cadeia(), confiancaExtra).toArray(new X509Certificate[0]));
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             kmf.init(ks, senhaInterna);
             Arrays.fill(senhaInterna, '\0');
@@ -54,6 +54,69 @@ public final class ContextoTls {
             return ctx;
         } catch (GeneralSecurityException | IOException e) {
             throw new DfeException("Não foi possível preparar a conexão segura com o certificado.", e);
+        }
+    }
+
+    /**
+     * Completa a cadeia do certificado com as ACs intermediárias encontradas na truststore.
+     *
+     * <p>Muitos .pfx trazem só o certificado da empresa. O servidor da Sefaz precisa da
+     * cadeia (ex.: AC SAFEWEB RFB → AC Secretaria da Receita Federal → AC Raiz) para
+     * aceitar o certificado; sem ela, a conexão pode ser recusada com HTTP 403.
+     * A raiz autoassinada não é enviada (o servidor já a tem).
+     */
+    public static List<X509Certificate> completarCadeia(List<X509Certificate> cadeia, KeyStore confianca) {
+        List<X509Certificate> resultado = new ArrayList<>(cadeia);
+        if (confianca == null || resultado.isEmpty()) {
+            return resultado;
+        }
+        List<X509Certificate> disponiveis = new ArrayList<>();
+        try {
+            for (String alias : java.util.Collections.list(confianca.aliases())) {
+                if (confianca.getCertificate(alias) instanceof X509Certificate x) {
+                    disponiveis.add(x);
+                }
+            }
+        } catch (GeneralSecurityException e) {
+            return resultado;
+        }
+        for (int i = 0; i < 10; i++) {
+            X509Certificate ultimo = resultado.get(resultado.size() - 1);
+            if (autoassinado(ultimo)) {
+                break;
+            }
+            X509Certificate emissor = acharEmissor(ultimo, disponiveis);
+            if (emissor == null || autoassinado(emissor) || resultado.contains(emissor)) {
+                break;
+            }
+            resultado.add(emissor);
+        }
+        return resultado;
+    }
+
+    private static X509Certificate acharEmissor(X509Certificate cert, List<X509Certificate> candidatos) {
+        for (X509Certificate c : candidatos) {
+            if (c.getSubjectX500Principal().equals(cert.getIssuerX500Principal())) {
+                try {
+                    cert.verify(c.getPublicKey());
+                    return c;
+                } catch (GeneralSecurityException e) {
+                    // mesmo nome, chave diferente (ex.: AC renovada): tenta o próximo
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean autoassinado(X509Certificate c) {
+        if (!c.getSubjectX500Principal().equals(c.getIssuerX500Principal())) {
+            return false;
+        }
+        try {
+            c.verify(c.getPublicKey());
+            return true;
+        } catch (GeneralSecurityException e) {
+            return false;
         }
     }
 

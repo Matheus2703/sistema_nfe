@@ -88,7 +88,8 @@ public final class ClienteSefaz {
             throw new SefazComunicacaoException("Envio interrompido.", true, e);
         }
 
-        ouvinte.recebido(servico, endereco, resp.statusCode(), resp.body());
+        String protocolo = resp.sslSession().map(javax.net.ssl.SSLSession::getProtocol).orElse("?");
+        ouvinte.recebido(servico, endereco, resp.statusCode(), "[" + protocolo + "]\n" + resp.body());
 
         // SOAP 1.2 devolve Fault com HTTP 500; tenta extrair a mensagem antes de falhar.
         if (resp.statusCode() != 200) {
@@ -96,10 +97,30 @@ public final class ClienteSefaz {
             if (corpo.contains("Envelope")) {
                 EnvelopeSoap.extrairRetorno(corpo); // lança com o texto do Fault
             }
-            throw new SefazComunicacaoException("Sefaz respondeu HTTP " + resp.statusCode() + ".",
-                    resp.statusCode() >= 500, null);
+            String dica = resp.statusCode() == 403
+                    ? " O servidor recusou o certificado da empresa (certificado não enviado, cadeia incompleta,"
+                    + " ou empresa sem acesso a este ambiente)."
+                    : "";
+            throw new SefazComunicacaoException("Sefaz respondeu HTTP " + resp.statusCode() + " (" + protocolo + ")."
+                    + dica + resumo(corpo), resp.statusCode() >= 500, null);
         }
         return EnvelopeSoap.extrairRetorno(resp.body());
+    }
+
+    /** Texto curto do corpo de uma resposta de erro (normalmente HTML do IIS). */
+    static String resumo(String corpo) {
+        if (corpo == null || corpo.isBlank()) {
+            return "";
+        }
+        String texto = corpo.replaceAll("(?is)<(script|style)[^>]*>.*?</\\1>", " ")
+                .replaceAll("<[^>]+>", " ")
+                .replaceAll("&nbsp;", " ")
+                .replaceAll("\\s+", " ")
+                .strip();
+        if (texto.isEmpty()) {
+            return "";
+        }
+        return " Resposta: " + (texto.length() > 300 ? texto.substring(0, 300) + "..." : texto);
     }
 
     private static boolean servidorNaoConfiavel(Throwable e) {
@@ -129,6 +150,7 @@ public final class ClienteSefaz {
         private Duration timeoutConexao = TIMEOUT_CONEXAO_PADRAO;
         private Duration timeoutResposta = TIMEOUT_RESPOSTA_PADRAO;
         private ProxySelector proxy = ProxySelector.getDefault();
+        private String[] protocolosTls = {"TLSv1.2"};
         private OuvinteMensagens ouvinte = OuvinteMensagens.NENHUM;
 
         private Construtor(CertificadoA1 certificado) {
@@ -157,6 +179,15 @@ public final class ClienteSefaz {
             return this;
         }
 
+        /**
+         * Versões de TLS permitidas. Padrão: só TLS 1.2. Os servidores IIS da Sefaz pedem o
+         * certificado do cliente depois do handshake, o que o Java não atende em TLS 1.3.
+         */
+        public Construtor protocolosTls(String... protocolos) {
+            this.protocolosTls = protocolos.clone();
+            return this;
+        }
+
         public Construtor ouvinte(OuvinteMensagens ouvinte) {
             this.ouvinte = ouvinte;
             return this;
@@ -165,7 +196,7 @@ public final class ClienteSefaz {
         public ClienteSefaz construir() {
             SSLContext ctx = ContextoTls.criar(certificado, confiancaExtra);
             SSLParameters params = ctx.getDefaultSSLParameters();
-            params.setProtocols(new String[]{"TLSv1.3", "TLSv1.2"});
+            params.setProtocols(protocolosTls);
             HttpClient.Builder b = HttpClient.newBuilder()
                     .version(HttpClient.Version.HTTP_1_1)
                     .sslContext(ctx)
