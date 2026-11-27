@@ -21,6 +21,7 @@ schemas oficiais, assinado e enviado direto aos web services da Sefaz.
 | Endereços dos web services do RS (NF-e e NFC-e, homologação e produção) | ✅ |
 | Consulta de status do serviço (`NFeStatusServico4`) | ✅ testado com Sefaz falsa local |
 | **Status 107 na homologação real da Sefaz RS** | ✅ recebido em 27/11/2026 |
+| Fase 1: consulta da situação da NF-e pela chave (`NFeConsultaProtocolo4`), com `protNFe` e eventos | ✅ testado com Sefaz falsa local |
 
 ## Estrutura
 
@@ -41,8 +42,9 @@ Pacotes do `dfe-core`:
 | `certificado` | `CertificadoA1`: abre o .pfx, lê CNPJ (OID ICP-Brasil 2.16.76.1.3.3), validade |
 | `xml` | `Xml` (JAXB ⇄ DOM ⇄ texto sem prefixos, leitura segura contra XXE), `ValidadorXsd` |
 | `ws` | `CatalogoWebServices`, `ContextoTls`, `EnvelopeSoap`, `ClienteSefaz` |
-| `servico` | `ConsultaStatusServico` (os próximos serviços entram aqui) |
+| `servico` | `ConsultaStatusServico`, `ConsultaProtocoloServico` (os próximos serviços entram aqui) |
 | `br.inf.portalfiscal.nfe` | classes geradas automaticamente dos XSD (em `target/`, não editar) |
+| `br.inf.portalfiscal.nfe.conssit` | classes geradas do `consSitNFe`/`retConsSitNFe`, em pacote próprio porque o leiaute da consulta redefine `TProtNFe` e traz os tipos de evento |
 
 ## Pré-requisitos
 
@@ -170,6 +172,51 @@ Se ainda vier 403:
 
 A Sefaz recusa certificado vencido. O programa avisa quando o certificado está fora da
 validade; nesse caso, use um A1 válido de uma empresa com inscrição estadual ativa no RS.
+
+## Consultar uma NF-e pela chave de acesso (consulta protocolo)
+
+O comando `consulta` pergunta à Sefaz a situação de uma NF-e ou NFC-e pela chave de acesso
+(`NFeConsultaProtocolo4`, mensagem `consSitNFe` 4.00). É assim que o sistema recupera uma nota
+depois de um timeout no envio ou de uma rejeição 204 (duplicidade): **nunca** se reenvia a nota
+com outro número. A UF e o modelo saem da própria chave; a senha e a truststore funcionam como
+no `status`.
+
+Linux/macOS:
+
+```bash
+export NFE_PFX_SENHA='sua-senha'
+java -jar dfe-cli/target/dfe-cli.jar consulta --pfx /caminho/certificado.pfx \
+  --chave 43261111222333000181550010000009991314159268
+```
+
+Windows (PowerShell):
+
+```powershell
+$env:NFE_PFX_SENHA = 'sua-senha'
+java -jar dfe-cli\target\dfe-cli.jar consulta --pfx C:\caminho\certificado.pfx --chave 43261111222333000181550010000009991314159268
+```
+
+A chave do exemplo é fictícia (CNPJ 11.222.333/0001-81 dos testes, nota 999 de 11/2026), mas
+tem dígito verificador correto, então passa no schema e chega à Sefaz. Como nunca foi emitida, a
+resposta esperada é a rejeição **217** do MOC ("Rejeição: NF-e não consta na base de dados da
+SEFAZ", regra J03 da consulta protocolo):
+
+```
+cStat    : 217
+xMotivo  : Rejeicao: NF-e nao consta na base de dados da SEFAZ
+
+A Sefaz não tem nenhuma NF-e com esta chave neste ambiente.
+```
+
+Para uma nota autorizada, aparecem `cStat 100`, o número do protocolo (`nProt`) e a data do
+recebimento; para uma nota cancelada, `cStat 101` e o evento 110111 com o protocolo dele.
+A chave pode ser colada do DANFE com os espaços, entre aspas. O comando termina com código 0
+sempre que a Sefaz responde, qualquer que seja o `cStat`. Opções: `--ambiente producao`,
+`--verbose`, `--truststore`, `--tls`.
+
+O teste automatizado contra a Sefaz real também cobre a consulta: ele monta sozinho uma chave
+válida com o CNPJ do certificado e o mês atual, de um número que nunca foi emitido, e espera o 217
+(mesmo comando do `SefazHomologacaoRealTest` acima).
 
 ## Segurança
 
