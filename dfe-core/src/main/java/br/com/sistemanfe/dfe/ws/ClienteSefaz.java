@@ -98,8 +98,8 @@ public final class ClienteSefaz {
                 EnvelopeSoap.extrairRetorno(corpo); // lança com o texto do Fault
             }
             String dica = resp.statusCode() == 403
-                    ? " O servidor recusou o certificado da empresa (certificado não enviado, cadeia incompleta,"
-                    + " ou empresa sem acesso a este ambiente)."
+                    ? " O servidor recusou o certificado da empresa (vencido ou revogado, cadeia fora da"
+                    + " ICP-Brasil, ou empresa sem acesso a este ambiente)."
                     : "";
             throw new SefazComunicacaoException("Sefaz respondeu HTTP " + resp.statusCode() + " (" + protocolo + ")."
                     + dica + resumo(corpo), resp.statusCode() >= 500, null);
@@ -180,8 +180,8 @@ public final class ClienteSefaz {
         }
 
         /**
-         * Versões de TLS permitidas. Padrão: só TLS 1.2. Os servidores IIS da Sefaz pedem o
-         * certificado do cliente depois do handshake, o que o Java não atende em TLS 1.3.
+         * Versões de TLS permitidas. Padrão: só TLS 1.2. Os servidores da Sefaz RS não aceitam
+         * TLS 1.3 (derrubam a conexão; conferido em 27/11/2026).
          */
         public Construtor protocolosTls(String... protocolos) {
             this.protocolosTls = protocolos.clone();

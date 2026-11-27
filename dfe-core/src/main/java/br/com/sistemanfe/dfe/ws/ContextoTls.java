@@ -3,27 +3,33 @@ package br.com.sistemanfe.dfe.ws;
 import br.com.sistemanfe.dfe.DfeException;
 import br.com.sistemanfe.dfe.certificado.CertificadoA1;
 
-import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedKeyManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.security.Principal;
+import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.List;
 
 /**
  * Monta o {@link SSLContext} de TLS mútuo com a Sefaz para UM certificado (uma empresa).
+ *
+ * <p>Certificado do cliente: o da empresa é sempre apresentado (ver {@link CertificadoDaEmpresa}).
  *
  * <p>Confiança no servidor: aceita o que o Java já confia <b>ou</b> o que estiver na
  * truststore extra (normalmente a cadeia ICP-Brasil, que não vem no Java).
@@ -37,22 +43,12 @@ public final class ContextoTls {
 
     public static SSLContext criar(CertificadoA1 certificado, KeyStore confiancaExtra) {
         try {
-            // KeyStore temporária só em memória, com senha aleatória, para o KeyManager.
-            byte[] aleatorio = new byte[16];
-            new SecureRandom().nextBytes(aleatorio);
-            char[] senhaInterna = HexFormat.of().formatHex(aleatorio).toCharArray();
-            KeyStore ks = KeyStore.getInstance("PKCS12");
-            ks.load(null, null);
-            ks.setKeyEntry("certificado", certificado.chavePrivada(), senhaInterna,
-                    completarCadeia(certificado.cadeia(), confiancaExtra).toArray(new X509Certificate[0]));
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, senhaInterna);
-            Arrays.fill(senhaInterna, '\0');
-
+            List<X509Certificate> cadeia = completarCadeia(certificado.cadeia(), confiancaExtra);
             SSLContext ctx = SSLContext.getInstance("TLS");
-            ctx.init(kmf.getKeyManagers(), new TrustManager[]{confianca(confiancaExtra)}, new SecureRandom());
+            ctx.init(new KeyManager[]{new CertificadoDaEmpresa(certificado.chavePrivada(), cadeia)},
+                    new TrustManager[]{confianca(confiancaExtra)}, new SecureRandom());
             return ctx;
-        } catch (GeneralSecurityException | IOException e) {
+        } catch (GeneralSecurityException e) {
             throw new DfeException("Não foi possível preparar a conexão segura com o certificado.", e);
         }
     }
@@ -60,9 +56,9 @@ public final class ContextoTls {
     /**
      * Completa a cadeia do certificado com as ACs intermediárias encontradas na truststore.
      *
-     * <p>Muitos .pfx trazem só o certificado da empresa. O servidor da Sefaz precisa da
-     * cadeia (ex.: AC SAFEWEB RFB → AC Secretaria da Receita Federal → AC Raiz) para
-     * aceitar o certificado; sem ela, a conexão pode ser recusada com HTTP 403.
+     * <p>Muitos .pfx trazem só o certificado da empresa. Enviar também as intermediárias
+     * (ex.: AC SAFEWEB RFB → AC Secretaria da Receita Federal) permite que o servidor da
+     * Sefaz monte a cadeia até a raiz ICP-Brasil mesmo sem ter essas ACs instaladas.
      * A raiz autoassinada não é enviada (o servidor já a tem).
      */
     public static List<X509Certificate> completarCadeia(List<X509Certificate> cadeia, KeyStore confianca) {
@@ -150,6 +146,81 @@ public final class ContextoTls {
             }
         }
         throw new GeneralSecurityException("Nenhum X509TrustManager disponível.");
+    }
+
+    /**
+     * Gerente de chaves com um único certificado: o da empresa, sempre apresentado.
+     *
+     * <p>A Sefaz RS pede o certificado do cliente no handshake e manda a lista de ACs que
+     * aceita, que traz só as raízes (ex.: "Autoridade Certificadora Raiz Brasileira v5").
+     * O gerente padrão do Java só apresenta um certificado quando algum da cadeia foi
+     * emitido por uma AC da lista. Um .pfx com só o certificado da empresa (emitido por
+     * uma AC intermediária) não passa nesse filtro: o Java não envia nada e o IIS responde
+     * HTTP 403 (403.7). Como cada conexão tem exatamente um certificado, este gerente
+     * ignora a lista e deixa a decisão para o servidor. Só o tipo de chave é respeitado.
+     */
+    static final class CertificadoDaEmpresa extends X509ExtendedKeyManager {
+
+        static final String ALIAS = "empresa";
+
+        private final PrivateKey chave;
+        private final X509Certificate[] cadeia;
+
+        CertificadoDaEmpresa(PrivateKey chave, List<X509Certificate> cadeia) {
+            if (cadeia.isEmpty()) {
+                throw new IllegalArgumentException("Cadeia do certificado vazia.");
+            }
+            this.chave = chave;
+            this.cadeia = cadeia.toArray(new X509Certificate[0]);
+        }
+
+        @Override
+        public String chooseClientAlias(String[] tiposDeChave, Principal[] emissores, Socket socket) {
+            return aliasPara(tiposDeChave);
+        }
+
+        @Override
+        public String chooseEngineClientAlias(String[] tiposDeChave, Principal[] emissores, SSLEngine engine) {
+            return aliasPara(tiposDeChave);
+        }
+
+        @Override
+        public String[] getClientAliases(String tipoDeChave, Principal[] emissores) {
+            return aliasPara(new String[]{tipoDeChave}) == null ? null : new String[]{ALIAS};
+        }
+
+        @Override
+        public X509Certificate[] getCertificateChain(String alias) {
+            return ALIAS.equals(alias) ? cadeia.clone() : null;
+        }
+
+        @Override
+        public PrivateKey getPrivateKey(String alias) {
+            return ALIAS.equals(alias) ? chave : null;
+        }
+
+        @Override
+        public String chooseServerAlias(String tipoDeChave, Principal[] emissores, Socket socket) {
+            return null; // uso apenas como cliente
+        }
+
+        @Override
+        public String[] getServerAliases(String tipoDeChave, Principal[] emissores) {
+            return null;
+        }
+
+        private String aliasPara(String[] tiposDeChave) {
+            if (tiposDeChave == null) {
+                return null;
+            }
+            String algoritmo = cadeia[0].getPublicKey().getAlgorithm();
+            for (String tipo : tiposDeChave) {
+                if (algoritmo.equalsIgnoreCase(tipo)) {
+                    return ALIAS;
+                }
+            }
+            return null;
+        }
     }
 
     /** Aceita o certificado do servidor se qualquer um dos gerentes aceitar. */

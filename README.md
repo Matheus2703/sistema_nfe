@@ -15,6 +15,7 @@ schemas oficiais, assinado e enviado direto aos web services da Sefaz.
 | Classes Java geradas dos XSD oficiais (pacote PL_010h, já com IBS/CBS) | ✅ |
 | Leitura do certificado A1 (.pfx) com CNPJ, titular e validade | ✅ |
 | TLS mútuo com certificado por empresa + truststore ICP-Brasil opcional | ✅ |
+| Certificado da empresa sempre enviado no handshake (independe da lista de ACs anunciada pela Sefaz) | ✅ testado com Sefaz falsa que anuncia só a raiz |
 | Envelope SOAP 1.2 e leitura do retorno / SOAP Fault | ✅ |
 | Validação XSD antes de enviar | ✅ |
 | Endereços dos web services do RS (NF-e e NFC-e, homologação e produção) | ✅ |
@@ -67,6 +68,14 @@ Os testes não precisam de certificado nem de internet: geram certificados de te
 sobem uma "Sefaz falsa" local que exige certificado do cliente, como a real.
 
 ## Primeiro marco: status 107 na homologação da Sefaz RS
+
+0. Baixe o projeto com o Git (na primeira vez) e atualize com `git pull` depois:
+
+   ```bash
+   git clone --branch fase-0-fundacao https://github.com/Matheus2703/sistema_nfe.git
+   cd sistema_nfe
+   git pull
+   ```
 
 1. Na pasta principal do projeto (onde está o `pom.xml`), gere o jar:
 
@@ -135,6 +144,27 @@ O Java não traz a cadeia de certificados da ICP-Brasil. O próprio programa mon
    Isso cria o `icpbrasil.p12` (senha `changeit`) na pasta atual.
 3. Rode o `status` de novo a partir da mesma pasta: o `icpbrasil.p12` é usado automaticamente.
    Para usar outro arquivo, passe `--truststore caminho.p12`.
+
+### Se a Sefaz responder HTTP 403
+
+A Sefaz RS só aceita TLS 1.2 e pede o certificado do cliente no handshake, anunciando como
+aceitas apenas as raízes (da ICP-Brasil: v2, v5, v10 e v12, conferido em 27/11/2026). O
+gerente de chaves padrão do Java deixaria de enviar um `.pfx` que traz só o certificado da
+empresa; o `dfe-core` usa um gerente próprio que sempre envia o certificado.
+
+Se ainda vier 403:
+
+1. Confira a "Cadeia enviada" que o comando `status` imprime: o último certificado deve ter sido
+   emitido por uma raiz ICP-Brasil.
+2. Veja o handshake e procure `Produced client Certificate handshake message`. Se logo abaixo
+   aparecer `"Certificates": <empty list>`, nenhum certificado foi enviado:
+
+   ```bash
+   java -Djavax.net.debug=ssl:handshake -jar dfe-cli/target/dfe-cli.jar status --pfx certificado.pfx
+   ```
+
+3. Se o certificado foi enviado, o motivo é outro: certificado revogado, ou empresa sem acesso
+   ao ambiente de homologação.
 
 ### Certificado vencido
 

@@ -13,6 +13,7 @@ import br.com.sistemanfe.dfe.ws.ClienteSefaz;
 import br.com.sistemanfe.dfe.ws.ContextoTls;
 import br.com.sistemanfe.dfe.ws.ServicoSefaz;
 
+import javax.security.auth.x500.X500Principal;
 import java.io.Console;
 import java.net.URI;
 import java.nio.file.Files;
@@ -54,13 +55,22 @@ public final class Main {
               --modelo nfe|nfce                 (padrão: nfe)
               --uf RS                           (padrão: RS)
               --truststore <arquivo.p12|.jks>   cadeia ICP-Brasil (padrão: icpbrasil.p12 da pasta atual, se existir)
-              --tls 1.2|1.3|auto                versão do TLS (padrão: 1.2, exigido pelos servidores da Sefaz)
+              --tls 1.2|1.3|auto                versão do TLS (padrão: 1.2; a Sefaz RS não aceita 1.3)
               --verbose                         mostra o XML enviado e recebido
 
             Senhas:
               NFE_PFX_SENHA         senha do certificado (se ausente, será pedida)
               NFE_TRUSTSTORE_SENHA  senha da truststore (padrão: changeit)
+
+            Diagnóstico do TLS (mostra se o certificado da empresa foi enviado):
+              java -Djavax.net.debug=ssl:handshake -jar dfe-cli.jar status --pfx <arquivo.pfx>
             """;
+
+    private static final String DICA_403 = """
+            Dica: rode de novo com java -Djavax.net.debug=ssl:handshake -jar dfe-cli.jar status ...
+            e procure "Produced client Certificate handshake message": se vier "<empty list>",
+            nenhum certificado foi enviado. Confira também se a "Cadeia enviada" acima termina
+            numa raiz ICP-Brasil.""";
 
     private Main() {
     }
@@ -98,6 +108,9 @@ public final class Main {
             return USO;
         } catch (DfeException e) {
             System.err.println("ERRO: " + e.getMessage());
+            if (e.getMessage() != null && e.getMessage().contains("HTTP 403")) {
+                System.err.println(DICA_403);
+            }
             if (opcoes.containsKey("verbose") && e.getCause() != null) {
                 e.printStackTrace();
             }
@@ -151,9 +164,15 @@ public final class Main {
             System.out.println("Truststore: (nenhuma; usando só a confiança padrão do Java)");
         }
         int noPfx = cert.cadeia().size();
-        int enviada = ContextoTls.completarCadeia(cert.cadeia(), truststore).size();
+        List<X509Certificate> enviada = ContextoTls.completarCadeia(cert.cadeia(), truststore);
         System.out.println("Cadeia   : " + noPfx + " certificado(s) no .pfx"
-                + (enviada > noPfx ? ", " + enviada + " enviados (completada pela truststore)" : ""));
+                + (enviada.size() > noPfx ? ", " + enviada.size() + " enviados (completada pela truststore)" : ""));
+        System.out.println("Cadeia enviada:");
+        for (int i = 0; i < enviada.size(); i++) {
+            X509Certificate c = enviada.get(i);
+            System.out.println("  " + (i + 1) + ". " + nomeComum(c.getSubjectX500Principal())
+                    + "  (emitido por " + nomeComum(c.getIssuerX500Principal()) + ")");
+        }
 
         String tls = op.getOrDefault("tls", "1.2");
         switch (tls) {
@@ -266,6 +285,17 @@ public final class Main {
         System.out.println("  Emissor  : " + cert.certificado().getIssuerX500Principal().getName());
         System.out.println("  Validade : " + fmt.format(cert.validoDesde()) + " a " + fmt.format(cert.validoAte())
                 + (cert.vencido(relogio) ? "  ** VENCIDO **" : "  (" + cert.diasParaVencer(relogio) + " dias restantes)"));
+    }
+
+    /** CN de um nome X.500, ex.: {@code Autoridade Certificadora Raiz Brasileira v5}. */
+    static String nomeComum(X500Principal nome) {
+        String dn = nome.getName(X500Principal.RFC2253);
+        for (String parte : dn.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)")) {
+            if (parte.regionMatches(true, 0, "CN=", 0, 3)) {
+                return parte.substring(3).replace("\\", "");
+            }
+        }
+        return dn;
     }
 
     static String formatarCnpj(String c) {

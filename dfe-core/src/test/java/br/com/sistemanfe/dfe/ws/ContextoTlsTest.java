@@ -4,7 +4,9 @@ import br.com.sistemanfe.dfe.certificado.TruststoreIcpBrasil;
 import br.com.sistemanfe.dfe.teste.CertificadosDeTeste;
 import org.junit.jupiter.api.Test;
 
+import javax.security.auth.x500.X500Principal;
 import java.security.KeyStore;
+import java.security.Principal;
 import java.security.cert.X509Certificate;
 import java.util.List;
 
@@ -40,6 +42,19 @@ class ContextoTlsTest {
     void semTruststoreMantemCadeiaOriginal() {
         assertThat(ContextoTls.completarCadeia(List.of(empresa.certificado()), null))
                 .containsExactly(empresa.certificado());
+    }
+
+    @Test
+    void apresentaOCertificadoSoParaOTipoDeChaveDele() {
+        var gerente = new ContextoTls.CertificadoDaEmpresa(empresa.chaves().getPrivate(),
+                List.of(empresa.certificado(), ac.certificado()));
+        Principal[] acNaoRelacionada = {new X500Principal("CN=Outra AC, O=Outra, C=BR")};
+
+        assertThat(gerente.chooseEngineClientAlias(new String[]{"RSA"}, acNaoRelacionada, null))
+                .isEqualTo(ContextoTls.CertificadoDaEmpresa.ALIAS);
+        assertThat(gerente.chooseEngineClientAlias(new String[]{"EC"}, acNaoRelacionada, null)).isNull();
+        assertThat(gerente.getCertificateChain(ContextoTls.CertificadoDaEmpresa.ALIAS))
+                .containsExactly(empresa.certificado(), ac.certificado());
     }
 
     @Test

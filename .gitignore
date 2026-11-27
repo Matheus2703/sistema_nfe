@@ -21,3 +21,6 @@ target/
 # SO
 .DS_Store
 Thumbs.db
+
+# Cadeia ICP-Brasil baixada do ITI: só serve para gerar a truststore (icpbrasil.p12)
+ACcompactado.zip

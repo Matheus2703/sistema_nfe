@@ -34,9 +34,9 @@ multiempresa, com interface web. Começa em **homologação**.
 ## Situação atual
 
 > [!warning] Fase 0: falta só o marco final
-> Todo o código da fase 0 está pronto e testado (29 testes passando). Falta receber o
-> **cStat 107** ("Serviço em Operação") da homologação real da Sefaz RS, rodando no notebook
-> com o certificado da empresa.
+> Todo o código da fase 0 está pronto e testado (30 testes passando, mais 1 que só roda com o
+> certificado real). Falta receber o **cStat 107** ("Serviço em Operação") da homologação real
+> da Sefaz RS, rodando no notebook com o certificado da empresa.
 
 ### Histórico do teste real (no notebook, Windows)
 
@@ -48,18 +48,32 @@ multiempresa, com interface web. Começa em **homologação**.
 | 3 | Truststore | ✅ 186 certificados ICP-Brasil gravados em `icpbrasil.p12` | — |
 | 3 | 2º certificado | ✅ válido até 16/09/2027 | — |
 | 3 | Status | Conexão aberta, mas a Sefaz respondeu **HTTP 403** | TLS 1.2 fixo, cadeia completada, motivo do 403 exibido |
-| 4 | Status com a correção | ⏳ **aguardando novo teste** | — |
+| 4 | Diagnóstico do 403 (`openssl`, sem certificado) | A Sefaz RS **não aceita TLS 1.3** e pede o certificado do cliente **no handshake**, anunciando só as raízes aceitas | Reproduzido em teste: com `.pfx` só com o certificado da empresa, o Java não envia nada. Criado o gerente de chaves que sempre envia o certificado |
+| 5 | Status com a correção | ⏳ **aguardando novo teste** | — |
 
-> [!info] Hipótese para o HTTP 403
-> O servidor IIS da Sefaz pede o certificado do cliente **depois** do handshake. Em TLS 1.3 o Java
-> não atende esse pedido e o servidor responde 403 (403.7, "certificado do cliente obrigatório").
-> A correção usa **só TLS 1.2**. Se ainda vier 403, a mensagem agora mostra o motivo exato
-> devolvido pelo servidor (ex.: cadeia incompleta, empresa sem acesso à homologação).
+> [!info] Causa do HTTP 403 (diagnosticada em 27/11/2026)
+> - A homologação da Sefaz RS **não aceita TLS 1.3** (derruba a conexão). O Java já negociava
+>   TLS 1.2, então fixar o TLS 1.2 não mudava nada. A hipótese anterior (pedido de certificado
+>   depois do handshake, em TLS 1.3) estava errada.
+> - O servidor pede o certificado do cliente **no próprio handshake** e envia a lista de ACs que
+>   aceita: 61 no total; da ICP-Brasil, só as **raízes v2, v5, v10 e v12**.
+> - O gerente de chaves padrão do Java (`SunX509`) só envia o certificado se algum certificado da
+>   cadeia foi emitido por uma AC dessa lista. Um `.pfx` com só o certificado da empresa (emitido
+>   por uma AC intermediária) não passa no filtro: o Java **não envia nada** e o IIS responde 403.7.
+> - Correção: o `ContextoTls` usa um gerente de chaves próprio (`CertificadoDaEmpresa`) que
+>   **sempre** envia o certificado da empresa, com a cadeia completada pela truststore. Um teste
+>   novo sobe uma Sefaz falsa que anuncia só a raiz; ele falhava antes da correção.
+> - Se ainda vier 403, o motivo é outro (certificado revogado, empresa sem acesso à homologação).
+>   O comando `status` agora imprime a "Cadeia enviada"; para ver o handshake, rode com
+>   `java -Djavax.net.debug=ssl:handshake -jar ...` e procure `Produced client Certificate handshake message`
+>   (`<empty list>` = nenhum certificado enviado).
 
 ### Próximo passo
 
-- [ ] Baixar a versão nova da branch `fase-0-fundacao` e compilar com `.\mvnw.cmd -q package -DskipTests`
+- [ ] Atualizar a pasta do projeto (`$HOME\Desktop\sistema_nfe`, clone da branch `fase-0-fundacao`) com `git pull`
+- [ ] Compilar com `.\mvnw.cmd -q package -DskipTests`
 - [ ] Rodar `status` com o certificado válido e conferir **cStat 107**
+- [ ] Se vier 403: conferir a "Cadeia enviada" e rodar com `-Djavax.net.debug=ssl:handshake`
 - [ ] Com o 107 confirmado: iniciar a **Fase 1** (primeira NF-e autorizada)
 
 ---
@@ -135,13 +149,15 @@ graph TD
 - [x] Classes Java geradas dos XSD oficiais (PL_010h, com IBS/CBS)
 - [x] Leitura do certificado A1: titular, CNPJ, emissor, validade, aviso de vencido
 - [x] TLS mútuo com um certificado por empresa (TLS 1.2)
+- [x] Certificado da empresa sempre enviado no handshake, sem depender da lista de ACs que a Sefaz anuncia
 - [x] Truststore ICP-Brasil gerada pelo programa (`truststore --zip ACcompactado.zip`)
-- [x] Cadeia do certificado completada com as ACs da truststore
+- [x] Cadeia do certificado completada com as ACs da truststore (e impressa pelo `status`)
 - [x] Envelope SOAP 1.2, leitura do retorno e do SOAP Fault
 - [x] XML sem prefixos (`ns2:`) e validação XSD antes de enviar
 - [x] Endereços do RS (NF-e e NFC-e, homologação e produção) conferidos com o Portal Nacional
 - [x] Consulta de status + teste com "Sefaz falsa" local exigindo certificado do cliente
-- [x] Testes: 29 passando
+- [x] Teste com Sefaz falsa que anuncia só a AC raiz, como a Sefaz RS
+- [x] Testes: 30 passando, mais 1 que só roda com o certificado real
 - [ ] **cStat 107 na homologação real da Sefaz RS**
 
 ### Fase 1: checklist (próxima)
@@ -149,6 +165,7 @@ graph TD
 - [ ] Gerar `chave de acesso` (44 dígitos, dígito verificador módulo 11)
 - [ ] Montar `<NFe>` mínima: emitente, destinatário, 1 item, CSOSN 102, pagamento, totais
 - [ ] Assinar `infNFe` (XMLDSig enveloped, C14N, RSA-SHA1, `Reference URI="#NFe{chave}"`)
+- [ ] Conferir a assinatura em teste: desde o JDK 17 o Java recusa *validar* assinaturas SHA-1 no modo seguro; desligar `org.jcp.xml.dsig.secureValidation` só nesse `DOMValidateContext` (assinar não é afetado)
 - [ ] Validar contra `enviNFe_v4.00.xsd`
 - [ ] Enviar em `NFeAutorizacao4` síncrono (`indSinc=1`)
 - [ ] Montar `nfeProc` (NFe + protNFe) e guardar
@@ -164,7 +181,8 @@ graph TD
 > - XML no namespace padrão, **sem prefixos** (`ns2:`) nem declarações sobrando
 > - Assinatura só sobre `infNFe`, `Reference URI="#NFe{chave}"`, enveloped + C14N, RSA-SHA1; `Id` registrado como ID
 > - Truststore com a cadeia ICP-Brasil (não vem no Java)
-> - **TLS 1.2**: o IIS da Sefaz pede o certificado do cliente depois do handshake
+> - **TLS 1.2**: a Sefaz RS não aceita TLS 1.3 (derruba a conexão)
+> - Certificado do cliente **sempre enviado** (gerente de chaves próprio): a Sefaz anuncia só as raízes ICP-Brasil e o padrão do Java deixaria de enviar um `.pfx` sem as ACs intermediárias
 > - Um `SSLContext` por empresa, em cache, recriado na troca do certificado
 > - Numeração com trava no banco por (empresa, modelo, série); número nunca reaproveitado; buracos viram inutilização
 > - **Timeout nunca reenvia com número novo**: consulta pela chave; rejeição 204 (duplicidade) recupera o protocolo
@@ -193,21 +211,27 @@ graph TD
 
 Produção: mesmo caminho em `nfe.sefazrs.rs.gov.br`. NFC-e: `nfce-homologacao.sefazrs.rs.gov.br` / `nfce.sefazrs.rs.gov.br`.
 Lista completa em `dfe-core/src/main/resources/sefaz/webservices.properties`.
+Ainda não cadastrados: Ambiente Nacional (`NFeDistribuicaoDFe`, eventos do destinatário), que entra na fase 8,
+e SVC-AN (contingência do RS), que entra na fase 7.
 
 ---
 
 ## Como rodar (Windows / PowerShell)
 
-> [!example] Compilar
+> [!example] Atualizar e compilar
+> A pasta `$HOME\Desktop\sistema_nfe` é um clone da branch `fase-0-fundacao`.
+> Em outra máquina, na primeira vez: `git clone --branch fase-0-fundacao https://github.com/Matheus2703/sistema_nfe.git`.
 > ```powershell
-> cd $HOME\Downloads\sistema_nfe-fase-0-fundacao
+> cd $HOME\Desktop\sistema_nfe
+> git pull
 > .\mvnw.cmd -q package -DskipTests
 > ```
 
 > [!example] Gerar a truststore ICP-Brasil (uma vez)
 > Baixar o `ACcompactado.zip` no site do ITI ("Certificados das ACs da ICP-Brasil – arquivo único compactado").
+> Ele pode ficar na pasta do projeto (está no `.gitignore`).
 > ```powershell
-> java -jar dfe-cli\target\dfe-cli.jar truststore --zip "$HOME\Downloads\ACcompactado.zip"
+> java -jar dfe-cli\target\dfe-cli.jar truststore --zip ACcompactado.zip
 > ```
 
 > [!example] Consultar o status da Sefaz RS
@@ -216,6 +240,13 @@ Lista completa em `dfe-core/src/main/resources/sefaz/webservices.properties`.
 > ```
 > Opções: `--modelo nfce`, `--ambiente producao`, `--tls 1.2|1.3|auto`, `--verbose`, `--truststore arquivo.p12`.
 > A senha é pedida no terminal ou lida da variável `NFE_PFX_SENHA`.
+> O comando imprime a "Cadeia enviada": o último certificado deve ter sido emitido por uma raiz ICP-Brasil.
+
+> [!example] Ver o handshake TLS (se vier HTTP 403)
+> ```powershell
+> java "-Djavax.net.debug=ssl:handshake" -jar dfe-cli\target\dfe-cli.jar status --pfx "C:\caminho\certificado.pfx"
+> ```
+> Procurar `Produced client Certificate handshake message`. `"Certificates": <empty list>` quer dizer que nenhum certificado foi enviado.
 
 > [!example] Rodar os testes
 > ```powershell
@@ -234,6 +265,8 @@ Lista completa em `dfe-core/src/main/resources/sefaz/webservices.properties`.
 | Vazamento de certificado | Cofre criptografado, senha separada, logs sem segredos, `.pfx` no `.gitignore` |
 | Duplicidade ou buraco na numeração | Trava no banco, consulta por chave, inutilização |
 | Certificado vencido | Aviso no CLI; na fase 7, alerta 30 dias antes |
+| Sefaz mudar a lista de ACs aceitas ou a versão do TLS | Certificado sempre enviado; `--tls` configurável; diagnóstico com `javax.net.debug` |
+| Validação de assinatura SHA-1 bloqueada no JDK 17+ | Desligar o modo seguro só ao validar XML da NF-e (fases 1 e 8) |
 
 ---
 
@@ -247,7 +280,8 @@ Lista completa em `dfe-core/src/main/resources/sefaz/webservices.properties`.
 | Tela | Thymeleaf + HTMX | Simples para um dev; sem SPA |
 | Regime | Simples Nacional | Todos os emitentes iniciais |
 | Build | Maven + Maven Wrapper | Não exige Maven instalado |
-| TLS | 1.2 fixo (configurável) | Exigência prática dos servidores da Sefaz |
+| TLS | 1.2 fixo (configurável) | A Sefaz RS não aceita TLS 1.3 (conferido em 27/11/2026) |
+| Certificado do cliente | Gerente de chaves próprio, sempre envia | O padrão do Java não envia o certificado se a cadeia não chega a uma AC anunciada pela Sefaz |
 | Schemas | PL_010h (espelho do sped-nfe) | Conferir com o pacote oficial antes da produção |
 
 ## Em aberto
@@ -256,6 +290,7 @@ Lista completa em `dfe-core/src/main/resources/sefaz/webservices.properties`.
 - [ ] Contador para validar o motor fiscal e o DANFE
 - [ ] Conferir os schemas PL_010h com o pacote oficial do Portal Nacional da NF-e
 - [ ] Pull request da `fase-0-fundacao` para `main` depois do 107
+- [ ] Escolher a cópia principal do plano: esta nota do Obsidian ou `docs/PLANO.md` (hoje são iguais e precisam ser atualizadas juntas)
 
 ---
 
