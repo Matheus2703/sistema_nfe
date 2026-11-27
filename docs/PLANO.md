@@ -282,13 +282,14 @@ e SVC-AN (contingência do RS), que entra na fase 7.
 | Build | Maven + Maven Wrapper | Não exige Maven instalado |
 | TLS | 1.2 fixo (configurável) | A Sefaz RS não aceita TLS 1.3 (conferido em 27/11/2026) |
 | Certificado do cliente | Gerente de chaves próprio, sempre envia | O padrão do Java não envia o certificado se a cadeia não chega a uma AC anunciada pela Sefaz |
-| Schemas | PL_010h (espelho do sped-nfe) | Conferir com o pacote oficial antes da produção |
+| Schemas | PL_010h (espelho do sped-nfe) | Os usados no build são iguais aos pacotes oficiais PL_010h v1.03, PL_010d e PL_009p (conferido em 27/11/2026) |
 
 ## Em aberto
 
 - [ ] Hospedagem: nuvem, VPS ou servidor próprio (o sistema roda em Docker em qualquer uma)
 - [ ] Contador para validar o motor fiscal e o DANFE
-- [ ] Conferir os schemas PL_010h com o pacote oficial do Portal Nacional da NF-e
+- [x] Conferir os schemas PL_010h com o pacote oficial do Portal Nacional da NF-e (27/11/2026): os 12 usados no build, mais os de consulta de protocolo e inutilização (31 no total), são iguais aos oficiais. Fontes: PL_010h v1.03 de 13/11/2026, PL_010d (CNPJ alfanumérico) e PL_009p (`enviNFe`, `consStatServ` e outros)
+- [ ] Conferir os schemas de eventos (fase 2) e de distribuição DF-e (fase 8) com os pacotes oficiais próprios (eventos da NT 2025.002 v1.40, Distribuição de DF-e v1.04)
 - [ ] Pull request da `fase-0-fundacao` para `main` (o 107 já foi recebido)
 - [ ] Escolher a cópia principal do plano: esta nota do Obsidian ou `docs/PLANO.md` (hoje são iguais e precisam ser atualizadas juntas)
 

@@ -185,4 +185,6 @@ validade; nesse caso, use um A1 válido de uma empresa com inscrição estadual 
 4. Rode `./mvnw verify`: as classes são regeneradas e os testes mostram o que quebrou.
 
 Os schemas atuais (PL_010h) vieram do espelho público mantido pelo projeto
-nfephp-org/sped-nfe. Antes de ir para produção, confira com o pacote oficial do portal.
+nfephp-org/sped-nfe. Em 27/11/2026, os usados no build foram conferidos com os pacotes
+oficiais do portal (PL_010h v1.03, PL_010d e PL_009p) e são iguais. Os schemas de eventos
+e de distribuição DF-e ainda precisam ser conferidos com os pacotes próprios deles.
