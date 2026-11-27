@@ -119,7 +119,8 @@ graph TD
 
 | Pacote | Classes |
 |---|---|
-| `comum` | `Ambiente`, `UF`, `ModeloDocumento` |
+| `comum` | `Ambiente`, `UF`, `ModeloDocumento`, `FormaEmissao` (`tpEmis`) |
+| `nfe` | `ChaveAcesso` (44 caracteres, DV módulo 11 com CNPJ alfanumérico, `cNF` aleatório, `Id` da `infNFe`) |
 | `certificado` | `CertificadoA1` (CNPJ pelo OID ICP-Brasil 2.16.76.1.3.3, validade), `TruststoreIcpBrasil` |
 | `xml` | `Xml` (sem prefixos de namespace, leitura protegida contra XXE), `ValidadorXsd` |
 | `ws` | `CatalogoWebServices`, `ContextoTls`, `EnvelopeSoap`, `ClienteSefaz`, `ServicoSefaz` |
@@ -162,7 +163,7 @@ graph TD
 
 ### Fase 1: checklist (próxima)
 
-- [ ] Gerar `chave de acesso` (44 dígitos, dígito verificador módulo 11)
+- [x] Gerar `chave de acesso` (44 dígitos, dígito verificador módulo 11): `ChaveAcesso` gera, valida, decompõe e devolve o `Id` da `infNFe`; aceita CNPJ alfanumérico; `cNF` sorteado fora da rejeição 897
 - [ ] Montar `<NFe>` mínima: emitente, destinatário, 1 item, CSOSN 102, pagamento, totais
 - [ ] Assinar `infNFe` (XMLDSig enveloped, C14N, RSA-SHA1, `Reference URI="#NFe{chave}"`)
 - [ ] Conferir a assinatura em teste: desde o JDK 17 o Java recusa *validar* assinaturas SHA-1 no modo seguro; desligar `org.jcp.xml.dsig.secureValidation` só nesse `DOMValidateContext` (assinar não é afetado)
@@ -180,6 +181,7 @@ graph TD
 > [!tip] Regras que o código já segue ou vai seguir
 > - XML no namespace padrão, **sem prefixos** (`ns2:`) nem declarações sobrando
 > - Assinatura só sobre `infNFe`, `Reference URI="#NFe{chave}"`, enveloped + C14N, RSA-SHA1; `Id` registrado como ID
+> - Chave de acesso: `cNF` sorteado com `SecureRandom`, nunca igual ao `nNF` nem às sequências vetadas pela NT 2019.001 (rejeição 897); no DV, cada caractere vale o código ASCII menos 48, então as letras do CNPJ alfanumérico valem de 17 (A) a 42 (Z) (NT Conjunta 2025.001)
 > - Truststore com a cadeia ICP-Brasil (não vem no Java)
 > - **TLS 1.2**: a Sefaz RS não aceita TLS 1.3 (derruba a conexão)
 > - Certificado do cliente **sempre enviado** (gerente de chaves próprio): a Sefaz anuncia só as raízes ICP-Brasil e o padrão do Java deixaria de enviar um `.pfx` sem as ACs intermediárias
