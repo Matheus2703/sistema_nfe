@@ -120,28 +120,26 @@ Também dá para rodar o teste automatizado contra a Sefaz real:
 NFE_PFX=/caminho/certificado.pfx NFE_PFX_SENHA='sua-senha' ./mvnw -pl dfe-core test -Dtest=SefazHomologacaoRealTest
 ```
 
-### Se der erro de TLS ("Certificado do servidor da Sefaz não é confiável")
+### Se der erro "O Java não confia no certificado do servidor da Sefaz"
 
-O Java não traz a cadeia de certificados da ICP-Brasil. Monte uma truststore com ela:
+O Java não traz a cadeia de certificados da ICP-Brasil. O próprio programa monta a truststore:
 
-1. Baixe o arquivo único das ACs da ICP-Brasil no site do ITI
-   (gov.br/iti → Repositório → "Certificados das ACs da ICP-Brasil – arquivo único compactado")
-   e descompacte numa pasta, por exemplo `icpbrasil/`.
-2. Importe todos os certificados numa truststore:
-
-   Linux/macOS:
+1. Baixe no site do ITI (gov.br/iti → Repositório → "Certificados das ACs da ICP-Brasil –
+   arquivo único compactado") o arquivo `ACcompactado.zip`. Não precisa descompactar.
+2. Na pasta de onde você roda o programa, gere a truststore:
 
    ```bash
-   for c in icpbrasil/*.crt icpbrasil/*.cer; do [ -f "$c" ] && keytool -importcert -noprompt -storetype PKCS12 -keystore icpbrasil.p12 -storepass changeit -alias "$(basename "$c")" -file "$c"; done
+   java -jar dfe-cli/target/dfe-cli.jar truststore --zip /caminho/ACcompactado.zip
    ```
 
-   Windows (PowerShell):
+   Isso cria o `icpbrasil.p12` (senha `changeit`) na pasta atual.
+3. Rode o `status` de novo a partir da mesma pasta: o `icpbrasil.p12` é usado automaticamente.
+   Para usar outro arquivo, passe `--truststore caminho.p12`.
 
-   ```powershell
-   Get-ChildItem icpbrasil\* -Include *.crt,*.cer | ForEach-Object { keytool -importcert -noprompt -storetype PKCS12 -keystore icpbrasil.p12 -storepass changeit -alias $_.Name -file $_.FullName }
-   ```
+### Certificado vencido
 
-3. Rode com `--truststore icpbrasil.p12` e `NFE_TRUSTSTORE_SENHA=changeit`.
+A Sefaz recusa certificado vencido. O programa avisa quando o certificado está fora da
+validade; nesse caso, use um A1 válido de uma empresa com inscrição estadual ativa no RS.
 
 ## Segurança
 

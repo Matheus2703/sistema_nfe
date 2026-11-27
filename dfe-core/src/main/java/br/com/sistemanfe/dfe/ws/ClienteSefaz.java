@@ -73,8 +73,14 @@ public final class ClienteSefaz {
             throw new SefazComunicacaoException("Não foi possível conectar na Sefaz (" + endereco.getHost() + "): "
                     + e.getMessage(), false, e);
         } catch (SSLException e) {
+            if (servidorNaoConfiavel(e)) {
+                throw new SefazComunicacaoException(
+                        "O Java não confia no certificado do servidor da Sefaz: falta a cadeia ICP-Brasil. "
+                                + "Gere a truststore ICP-Brasil e informe-a na conexão.", false, e);
+            }
             throw new SefazComunicacaoException("Falha na conexão segura (TLS) com a Sefaz: " + e.getMessage()
-                    + ". Verifique o certificado da empresa e a truststore ICP-Brasil.", false, e);
+                    + " | Verifique se o certificado da empresa está válido (não vencido) e é um e-CNPJ A1.",
+                    false, e);
         } catch (IOException e) {
             throw new SefazComunicacaoException("Erro de comunicação com a Sefaz: " + e.getMessage(), true, e);
         } catch (InterruptedException e) {
@@ -94,6 +100,15 @@ public final class ClienteSefaz {
                     resp.statusCode() >= 500, null);
         }
         return EnvelopeSoap.extrairRetorno(resp.body());
+    }
+
+    private static boolean servidorNaoConfiavel(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t.getMessage() != null && t.getMessage().contains(ContextoTls.MENSAGEM_SERVIDOR_NAO_CONFIAVEL)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Recebe cópia de toda mensagem enviada/recebida, para auditoria e depuração. */

@@ -2,6 +2,7 @@ package br.com.sistemanfe.cli;
 
 import br.com.sistemanfe.dfe.DfeException;
 import br.com.sistemanfe.dfe.certificado.CertificadoA1;
+import br.com.sistemanfe.dfe.certificado.TruststoreIcpBrasil;
 import br.com.sistemanfe.dfe.comum.Ambiente;
 import br.com.sistemanfe.dfe.comum.ModeloDocumento;
 import br.com.sistemanfe.dfe.comum.UF;
@@ -16,10 +17,13 @@ import java.io.Console;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyStore;
+import java.security.cert.X509Certificate;
 import java.time.Clock;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,21 +40,25 @@ public final class Main {
     static final int SEFAZ_FORA = 2;
     static final int USO = 64;
 
+    static final String TRUSTSTORE_PADRAO = "icpbrasil.p12";
+
     private static final String AJUDA = """
             Uso:
               java -jar dfe-cli.jar certificado --pfx <arquivo.pfx>
+              java -jar dfe-cli.jar truststore --zip <ACcompactado.zip> [--saida icpbrasil.p12]
+              java -jar dfe-cli.jar truststore --pasta <pasta-com-certificados> [--saida icpbrasil.p12]
               java -jar dfe-cli.jar status --pfx <arquivo.pfx> [opções]
 
             Opções do comando status:
               --ambiente homologacao|producao   (padrão: homologacao)
               --modelo nfe|nfce                 (padrão: nfe)
               --uf RS                           (padrão: RS)
-              --truststore <arquivo.p12|.jks>   cadeia ICP-Brasil, se o Java não confiar na Sefaz
+              --truststore <arquivo.p12|.jks>   cadeia ICP-Brasil (padrão: icpbrasil.p12 da pasta atual, se existir)
               --verbose                         mostra o XML enviado e recebido
 
             Senhas:
               NFE_PFX_SENHA         senha do certificado (se ausente, será pedida)
-              NFE_TRUSTSTORE_SENHA  senha da truststore (se ausente, vazia)
+              NFE_TRUSTSTORE_SENHA  senha da truststore (padrão: changeit)
             """;
 
     private Main() {
@@ -77,6 +85,7 @@ public final class Main {
             return switch (args[0]) {
                 case "certificado" -> certificado(opcoes);
                 case "status" -> status(opcoes);
+                case "truststore" -> truststore(opcoes);
                 default -> {
                     System.err.println("Comando desconhecido: " + args[0]);
                     System.err.println(AJUDA);
@@ -122,11 +131,21 @@ public final class Main {
         CertificadoA1 cert = abrirCertificado(op);
         imprimirCertificado(cert);
 
+        if (cert.vencido(Clock.systemDefaultZone())) {
+            System.out.println("\nATENÇÃO: o certificado está VENCIDO. A Sefaz vai recusar a conexão;"
+                    + " use um certificado A1 válido.");
+        }
+
         ClienteSefaz.Construtor construtor = ClienteSefaz.para(cert);
-        if (op.containsKey("truststore")) {
-            Path ts = Path.of(op.get("truststore"));
-            String senhaTs = System.getenv().getOrDefault("NFE_TRUSTSTORE_SENHA", "");
-            construtor.confiancaExtra(ContextoTls.lerTruststore(ts, senhaTs.toCharArray()));
+        Path ts = op.containsKey("truststore") ? Path.of(op.get("truststore")) : Path.of(TRUSTSTORE_PADRAO);
+        if (op.containsKey("truststore") && !Files.isRegularFile(ts)) {
+            throw new IllegalArgumentException("Truststore não encontrada: " + ts.toAbsolutePath());
+        }
+        if (Files.isRegularFile(ts)) {
+            System.out.println("Truststore: " + ts.toAbsolutePath());
+            construtor.confiancaExtra(ContextoTls.lerTruststore(ts, senhaTruststore()));
+        } else {
+            System.out.println("Truststore: (nenhuma; usando só a confiança padrão do Java)");
         }
         if (op.containsKey("verbose")) {
             construtor.ouvinte(new ClienteSefaz.OuvinteMensagens() {
@@ -161,6 +180,39 @@ public final class Main {
         }
         System.out.println("\nA Sefaz respondeu, mas o serviço não está em operação.");
         return SEFAZ_FORA;
+    }
+
+    private static int truststore(Map<String, String> op) {
+        List<X509Certificate> certs;
+        if (op.containsKey("zip")) {
+            certs = TruststoreIcpBrasil.lerZip(arquivoExistente(op.get("zip")));
+        } else if (op.containsKey("pasta")) {
+            Path pasta = Path.of(op.get("pasta"));
+            if (!Files.isDirectory(pasta)) {
+                throw new IllegalArgumentException("Pasta não encontrada: " + pasta.toAbsolutePath());
+            }
+            certs = TruststoreIcpBrasil.lerPasta(pasta);
+        } else {
+            throw new IllegalArgumentException("Informe --zip <ACcompactado.zip> ou --pasta <pasta>");
+        }
+        Path saida = Path.of(op.getOrDefault("saida", TRUSTSTORE_PADRAO));
+        KeyStore ks = TruststoreIcpBrasil.criar(certs);
+        TruststoreIcpBrasil.gravar(ks, saida, senhaTruststore());
+        System.out.println(certs.size() + " certificados gravados em " + saida.toAbsolutePath());
+        System.out.println("Rode o comando status a partir desta pasta para usá-la automaticamente.");
+        return OK;
+    }
+
+    private static Path arquivoExistente(String caminho) {
+        Path p = Path.of(caminho);
+        if (!Files.isRegularFile(p)) {
+            throw new IllegalArgumentException("Arquivo não encontrado: " + p.toAbsolutePath());
+        }
+        return p;
+    }
+
+    private static char[] senhaTruststore() {
+        return System.getenv().getOrDefault("NFE_TRUSTSTORE_SENHA", "changeit").toCharArray();
     }
 
     private static CertificadoA1 abrirCertificado(Map<String, String> op) {

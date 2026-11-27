@@ -121,7 +121,7 @@ class ClienteSefazTlsMutuoTest {
 
         assertThatThrownBy(() -> cliente.enviar(endereco, ServicoSefaz.STATUS_SERVICO, "<x/>"))
                 .isInstanceOf(SefazComunicacaoException.class)
-                .hasMessageContaining("TLS");
+                .hasMessageContaining("ICP-Brasil");
     }
 
     @Test

@@ -30,6 +30,8 @@ import java.util.List;
  */
 public final class ContextoTls {
 
+    static final String MENSAGEM_SERVIDOR_NAO_CONFIAVEL = "Certificado do servidor da Sefaz não é confiável";
+
     private ContextoTls() {
     }
 
@@ -101,9 +103,7 @@ public final class ContextoTls {
                     ultima = e;
                 }
             }
-            throw new CertificateException(
-                    "Certificado do servidor da Sefaz não é confiável. Informe a truststore com a cadeia ICP-Brasil.",
-                    ultima);
+            throw new CertificateException(MENSAGEM_SERVIDOR_NAO_CONFIAVEL + " (falta a cadeia ICP-Brasil).", ultima);
         }
 
         @Override
